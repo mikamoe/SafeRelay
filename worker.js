@@ -1,7 +1,7 @@
 /**
  * SafeRelay - Telegram Private Chat Relay Bot
  * 项目地址: https://github.com/qianqi32/SafeRelay
- * 版本: 1.1.0
+ * 版本: 1.2.0
  * 当前版本可能仍不稳定，如遇到 BUG 请提交至 issues 或者直接联系 @KiyukieBot
 */
 
@@ -81,11 +81,11 @@ const I18N = {
     guest_blocked: '🚫 You have been blocked by the admin and cannot send messages.',
     guest_union_banned: '🚫 <b>You are federation-banned.</b>\n\nYour account was banned globally for violating the terms of service. Please contact the admin if you have questions.',
     guest_fraud_blocked: '🚫 <b>Service Unavailable</b>\n\nYour account was flagged as abnormal and cannot use this service.',
-    admin_fraud_detected: '🚨 <b>Fraudulent User Detected</b>\n\nUID: <code>{uid}</code>\nThis user is in the fraud database and was blocked automatically.',
+    admin_fraud_detected: '🚨 <b>Fraudulent User Detected</b>\n\n🆔 UID: <code>{uid}</code>\nThis user is in the fraud database and was blocked automatically.',
     guest_spam_blocked: '🚫 Your message was blocked for violating the rules. Please contact the admin if you have questions.',
     guest_spam_fake_sent: '✅ Message sent',
-    admin_spam_intercepted: '🧹 <b>Spam Message Blocked</b>\n\nUID: <code>{uid}</code>\nReason: {reason}\n\n<i>The message was blocked and not forwarded to the admin.</i>',
-    guest_rate_limited: '⚠️ You are sending messages too fast. Please wait {seconds} seconds and try again.',
+    admin_spam_intercepted: '🧹 <b>Spam Message Blocked</b>\n\n🆔 UID: <code>{uid}</code>\nReason: {reason}\n\n<i>The message was blocked and not forwarded to the admin.</i>',
+    guest_rate_limited: '⏳ You are sending messages too fast. Please wait {seconds} seconds and try again.',
     spam_reason_links: 'Too many links ({count}/{max})',
     spam_reason_keyword: 'Blocked keyword: {keyword}',
     spam_reason_regex: 'Matched a blocked pattern',
@@ -142,7 +142,24 @@ const I18N = {
     btn_verify_turnstile: '🛡️ Start Verification',
     turnstile_success: '✅ Verification passed!\n\nIf you verified more than once, please wait a minute before sending a message so the status can sync.',
     turnstile_success_pending: '✅ Verification passed!\n\n📩 Your {count} queued message(s) were delivered to the admin.',
-    verify_admin_notify: '✅ <b>New User Verified</b>',
+    new_user_title: '🆕 <b>New User Joined</b>',
+    new_user_name: '👤 Name: {name}',
+    new_user_uid: '🆔 UID: <a href="tg://user?id={uid}">{uid}</a>',
+    new_user_username: '🏷️ Username: @{username}',
+    new_user_no_username: '🏷️ Username: —',
+    new_user_method: '🔐 Verification: {method}',
+    new_user_hint: 'This user has passed verification and can now message you.',
+    new_user_method_quiz: 'Local Quiz',
+    new_user_method_turnstile: 'Turnstile',
+    new_user_method_both: 'Quiz + Turnstile',
+    btn_trust_user: '⭐ Trust',
+    btn_ban_user: '🚫 Ban',
+    toast_newuser_trusted: '⭐ Trusted user {userId}',
+    toast_newuser_banned: '🚫 Banned user {userId}',
+    blocked_bot_title: '📵 <b>User Blocked the Bot</b>',
+    blocked_bot_note: 'This user has blocked the bot, so messages can no longer be delivered to them.',
+    panel_topic_redirect: '🎛️ <b>Topic Mode is on — admin panels run in the group.</b>\n\nOpen the group\'s General topic to use /menu and /help, so every admin works from the same panel.',
+    btn_open_group: '💬 Open Group',
     btn_open_profile: '👤 Open Profile',
     verify_not_configured: 'Turnstile is not configured',
     verify_page_title: 'Human Verification - SafeRelay',
@@ -156,11 +173,7 @@ const I18N = {
     verify_page_footer: 'Powered by SafeRelay',
     verify_page_loading: 'Verifying...',
     spam_topic_name: '🗑️ Spam Bin',
-    spam_silently_handled: '🗑️ <b>Spam Message Handled Silently</b>\n\nUID: <code>{uid}</code>\nTopic ID: <code>{topicId}</code>\n\n<i>The message was moved to the spam topic. The user was not notified.</i>',
-    topic_welcome_title: '👤 <b>New Guest Conversation</b>',
-    topic_welcome_uid: 'UID: <code>{uid}</code>',
-    topic_welcome_username: 'Username: @{username}',
-    topic_welcome_nickname: 'Name: {name}',
+    spam_silently_handled: '🗑️ <b>Spam Message Handled Silently</b>\n\n🆔 UID: <code>{uid}</code>\nTopic ID: <code>{topicId}</code>\n\n<i>The message was moved to the spam topic. The user was not notified.</i>',
     topic_welcome_hint: 'Reply in this topic to respond to the guest.',
     guest_default_name: 'Guest',
     rules_link_limit: '<b>Link Limit:</b> Up to {max} links',
@@ -186,7 +199,7 @@ const I18N = {
     btn_language: '🌍 Language',
     btn_english: 'English',
     btn_chinese: '简体中文',
-    menu_title: '🛡️ <b>SafeRelay Admin Panel</b>',
+    menu_title: '🎛️ <b>SafeRelay Admin Panel</b>',
     menu_current_config: '📊 <b>Current Settings:</b>',
     menu_verify_mode: 'Verification: {mode}',
     menu_spam_filter: 'Spam Filter: {status}',
@@ -198,9 +211,9 @@ const I18N = {
     menu_forward_topic: '💬 Forum Topics',
     menu_forward_direct: '📥 Direct Messages',
     menu_tap_below: 'Tap a button below to open its settings.',
-    btn_verify_mode: '🛡️ Verification',
+    btn_verify_mode: '🔐 Verification',
     btn_spam_filter: '🧹 Spam Filter',
-    btn_ai_detection: '🤖 AI Detection',
+    btn_ai_detection: '🧠 AI Detection',
     btn_spam_topic: '🗑️ Spam Topic',
     btn_union_ban: '🌐 Federation Ban',
     btn_users: '👥 Users',
@@ -237,7 +250,7 @@ const I18N = {
     kw_section_allow: '=== Allowed Keywords ===',
     kw_section_block_re: '=== Blocked Patterns ===',
     kw_section_allow_re: '=== Allowed Patterns ===',
-    ai_title: '🤖 <b>AI Spam Detection</b>',
+    ai_title: '🧠 <b>AI Spam Detection</b>',
     ai_status: 'Status: <b>{status}</b>',
     ai_config_title: '<b>Configuration:</b>',
     ai_threshold: 'Confidence Threshold: {value}',
@@ -316,7 +329,7 @@ const I18N = {
     toast_fwd_need_config: '⚠️ Please configure GROUP_ID and ENV_ADMIN_UID in the environment variables first',
     toast_fwd_topic_unavailable: 'Topic mode unavailable: {issue}',
     toast_fwd_switched_topic: 'Switched to Topic Mode', toast_fwd_switched_direct: 'Switched to Direct Mode',
-    verify_title: '🛡️ <b>Verification Settings</b>',
+    verify_title: '🔐 <b>Verification Settings</b>',
     verify_current: 'Current Mode: <b>{mode}</b>',
     verify_options_title: '<b>Available Modes:</b>',
     verify_options_block: '📝 <b>Local Quiz</b> - Simple built-in questions (default, no setup needed)\n☁️ <b>Turnstile</b> - Cloudflare Turnstile web verification\n🔒 <b>Quiz + Turnstile</b> - Both checks are required',
@@ -363,7 +376,7 @@ const I18N = {
     toast_refreshed: 'Refreshed',
     toast_user_trusted: 'Trusted user {userId}', toast_user_untrusted: 'Removed trust for user {userId}',
     toast_user_blocked: 'Blocked user {userId}', toast_user_unblocked: 'Unblocked user {userId}',
-    help_title: '🛡️ <b>SafeRelay Admin Panel</b>',
+    help_title: '🎛️ <b>SafeRelay Admin Panel</b>',
     help_common_title: '<b>Common Commands:</b>',
     help_user_mgmt_title: '<b>User Management (reply to a message, or add an ID):</b>',
     help_msg_settings_title: '<b>Message Settings:</b>',
@@ -413,12 +426,12 @@ const I18N = {
     untrust_success: '✅ Trust removed for user <code>{id}</code>.',
     untrust_hint: '📋 Reply to a user message, or send /untrust 123456 to remove trust',
     bcancel_done: '✅ Broadcast cancelled',
-    cache_stats_text: '📊 <b>Cache Statistics</b>\n\n<b>L1 In-Memory Cache:</b>\n  Hits: {l1Hits}\n  Misses: {l1Misses}\n  Hit Rate: {l1Rate}\n  Entries: {l1Size}\n\n<b>L2 KV Cache:</b>\n  Hits: {l2Hits}\n  Misses: {l2Misses}\n  Hit Rate: {l2Rate}\n\n<i>Tip: a higher hit rate means better performance.</i>',
+    cache_stats_text: '🗄️ <b>Cache Statistics</b>\n\n<b>L1 In-Memory Cache:</b>\n  Hits: {l1Hits}\n  Misses: {l1Misses}\n  Hit Rate: {l1Rate}\n  Entries: {l1Size}\n\n<b>L2 KV Cache:</b>\n  Hits: {l2Hits}\n  Misses: {l2Misses}\n  Hit Rate: {l2Rate}\n\n<i>Tip: a higher hit rate means better performance.</i>',
     clearcache_done: '✅ All caches cleared\n\nThe L1 in-memory cache and statistics were reset.\nThe L2 KV cache will expire automatically.',
     restore_not_enabled: '⚠️ The spam topic feature is not enabled, so messages cannot be restored.',
     restore_wrong_topic: '⚠️ Please reply to a message in the spam topic to restore it.\n\nNote: only messages in the spam topic can be restored.',
-    restore_success_topic: '✅ Message restored to the guest topic\n\nUID: <code>{uid}</code>\nTopic ID: <code>{topicId}</code>',
-    restore_success_dm: '✅ Message restored and sent to the guest\n\nUID: <code>{uid}</code>',
+    restore_success_topic: '✅ Message restored to the guest topic\n\n🆔 UID: <code>{uid}</code>\nTopic ID: <code>{topicId}</code>',
+    restore_success_dm: '✅ Message restored and sent to the guest\n\n🆔 UID: <code>{uid}</code>',
     restore_no_mapping: '⚠️ No message mapping found, so it cannot be restored.\n\nPossible reasons: the mapping expired (over 48 hours), or the message was not forwarded via the spam topic feature.',
     restore_failed: '❌ Failed to restore the message. Please try again later.',
     invalid_command_topic: '⚠️ Invalid command "{cmd}"\n\nSend /help to see all available commands.',
@@ -428,7 +441,7 @@ const I18N = {
     spam_rules_updated: '✅ Spam filter rules updated',
     cleanup_no_group: '⚠️ GROUP_ID is not configured\n\nTopic cleanup is only needed when using a forum group.\nPlease set GROUP_ID in the Cloudflare environment variables.',
     cleanup_scan_dry: '🔍 <b>Scanning for Invalid Topics (Preview Mode)</b>',
-    cleanup_scan: '🧹 <b>Cleaning Up Invalid Topics</b>',
+    cleanup_scan: '♻️ <b>Cleaning Up Invalid Topics</b>',
     cleanup_scanning: 'Scanning user data...',
     cleanup_progress: 'Progress: {done}/{total}\nInvalid found: {invalid}',
     cleanup_progress_cleaned: 'Cleaned: {cleaned}',
@@ -450,11 +463,11 @@ const I18N = {
     guest_blocked: '🚫 您已被管理员拉黑，无法发送消息。',
     guest_union_banned: '🚫 <b>您已被联合封禁。</b>\n\n您的账号因违反服务条款被全局封禁。如有疑问，请联系管理员。',
     guest_fraud_blocked: '🚫 <b>服务不可用</b>\n\n您的账号存在异常，无法使用本服务。',
-    admin_fraud_detected: '🚨 <b>检测到欺诈用户</b>\n\nUID: <code>{uid}</code>\n该用户出现在欺诈数据库中，已自动拦截。',
+    admin_fraud_detected: '🚨 <b>检测到欺诈用户</b>\n\n🆔 UID: <code>{uid}</code>\n该用户出现在欺诈数据库中，已自动拦截。',
     guest_spam_blocked: '🚫 您的消息因违反规则被拦截。如有疑问，请联系管理员。',
     guest_spam_fake_sent: '✅ 消息已发送',
-    admin_spam_intercepted: '🧹 <b>垃圾消息拦截</b>\n\nUID: <code>{uid}</code>\n原因：{reason}\n\n<i>消息已拦截，未转发给管理员。</i>',
-    guest_rate_limited: '⚠️ 发送过于频繁，请等待 {seconds} 秒后再试。',
+    admin_spam_intercepted: '🧹 <b>垃圾消息拦截</b>\n\n🆔 UID: <code>{uid}</code>\n原因：{reason}\n\n<i>消息已拦截，未转发给管理员。</i>',
+    guest_rate_limited: '⏳ 发送过于频繁，请等待 {seconds} 秒后再试。',
     spam_reason_links: '链接过多 ({count}/{max})',
     spam_reason_keyword: '命中关键词：{keyword}',
     spam_reason_regex: '命中正则规则',
@@ -511,7 +524,24 @@ const I18N = {
     btn_verify_turnstile: '🛡️ 开始人机验证',
     turnstile_success: '✅ 验证通过！\n\n如果重复验证请等待一分钟后再发送消息，以确保验证状态同步。',
     turnstile_success_pending: '✅ 验证通过！\n\n📩 刚才的 {count} 条消息已送达管理员。',
-    verify_admin_notify: '✅ <b>新用户验证通过</b>',
+    new_user_title: '🆕 <b>新用户接入</b>',
+    new_user_name: '👤 昵称：{name}',
+    new_user_uid: '🆔 UID：<a href="tg://user?id={uid}">{uid}</a>',
+    new_user_username: '🏷️ 用户名：@{username}',
+    new_user_no_username: '🏷️ 用户名：—',
+    new_user_method: '🔐 验证方式：{method}',
+    new_user_hint: '该用户已通过验证，现在可以向你发送消息。',
+    new_user_method_quiz: '本地题库',
+    new_user_method_turnstile: 'Turnstile',
+    new_user_method_both: '题库 + Turnstile',
+    btn_trust_user: '⭐ 信任',
+    btn_ban_user: '🚫 封禁',
+    toast_newuser_trusted: '⭐ 已信任用户 {userId}',
+    toast_newuser_banned: '🚫 已封禁用户 {userId}',
+    blocked_bot_title: '📵 <b>用户已屏蔽机器人</b>',
+    blocked_bot_note: '该用户已屏蔽机器人，消息将无法再送达给对方。',
+    panel_topic_redirect: '🎛️ <b>话题模式已开启，管理面板在群组里使用。</b>\n\n请到群组的 General 话题里使用 /menu 和 /help，这样所有管理员看到的是同一个面板。',
+    btn_open_group: '💬 打开群组',
     btn_open_profile: '👤 打开用户资料',
     verify_not_configured: 'Turnstile 未配置',
     verify_page_title: '人机验证 - SafeRelay',
@@ -525,11 +555,7 @@ const I18N = {
     verify_page_footer: '该界面由 SafeRelay 提供',
     verify_page_loading: '验证中...',
     spam_topic_name: '🗑️ 垃圾消息回收站',
-    spam_silently_handled: '🗑️ <b>垃圾消息已静默处理</b>\n\nUID: <code>{uid}</code>\n话题 ID: <code>{topicId}</code>\n\n<i>消息已转发到垃圾话题，访客无感知。</i>',
-    topic_welcome_title: '👤 <b>新访客对话</b>',
-    topic_welcome_uid: 'UID：<code>{uid}</code>',
-    topic_welcome_username: '用户名：@{username}',
-    topic_welcome_nickname: '昵称：{name}',
+    spam_silently_handled: '🗑️ <b>垃圾消息已静默处理</b>\n\n🆔 UID: <code>{uid}</code>\n话题 ID: <code>{topicId}</code>\n\n<i>消息已转发到垃圾话题，访客无感知。</i>',
     topic_welcome_hint: '请在此话题内回复访客消息。',
     guest_default_name: '访客',
     rules_link_limit: '<b>链接限制：</b> 最多 {max} 个',
@@ -555,7 +581,7 @@ const I18N = {
     btn_language: '🌍 语言',
     btn_english: 'English',
     btn_chinese: '简体中文',
-    menu_title: '🛡️ <b>SafeRelay 管理面板</b>',
+    menu_title: '🎛️ <b>SafeRelay 管理面板</b>',
     menu_current_config: '📊 <b>当前配置：</b>',
     menu_verify_mode: '验证模式：{mode}',
     menu_spam_filter: '垃圾过滤：{status}',
@@ -567,9 +593,9 @@ const I18N = {
     menu_forward_topic: '💬 话题',
     menu_forward_direct: '📥 私聊',
     menu_tap_below: '点击下方按钮进入设置。',
-    btn_verify_mode: '🛡️ 验证模式',
+    btn_verify_mode: '🔐 验证模式',
     btn_spam_filter: '🧹 垃圾过滤',
-    btn_ai_detection: '🤖 AI 检测',
+    btn_ai_detection: '🧠 AI 检测',
     btn_spam_topic: '🗑️ 垃圾话题',
     btn_union_ban: '🌐 联合封禁',
     btn_users: '👥 用户管理',
@@ -606,7 +632,7 @@ const I18N = {
     kw_section_allow: '=== 放行关键词 ===',
     kw_section_block_re: '=== 拦截正则 ===',
     kw_section_allow_re: '=== 放行正则 ===',
-    ai_title: '🤖 <b>AI 垃圾检测设置</b>',
+    ai_title: '🧠 <b>AI 垃圾检测设置</b>',
     ai_status: '当前状态：<b>{status}</b>',
     ai_config_title: '<b>配置信息：</b>',
     ai_threshold: '置信度阈值：{value}',
@@ -685,7 +711,7 @@ const I18N = {
     toast_fwd_need_config: '⚠️ 请先在环境变量中配置 GROUP_ID 和 ENV_ADMIN_UID',
     toast_fwd_topic_unavailable: '话题模式不可用：{issue}',
     toast_fwd_switched_topic: '已切换到话题模式', toast_fwd_switched_direct: '已切换到私聊模式',
-    verify_title: '🛡️ <b>验证模式设置</b>',
+    verify_title: '🔐 <b>验证模式设置</b>',
     verify_current: '当前模式：<b>{mode}</b>',
     verify_options_title: '<b>可选模式：</b>',
     verify_options_block: '📝 <b>本地题库</b> - 使用内置简单题目验证（默认，无需配置）\n☁️ <b>Turnstile</b> - 使用 Cloudflare Turnstile 网页验证\n🔒 <b>双重验证</b> - 需要同时通过两种验证',
@@ -732,7 +758,7 @@ const I18N = {
     toast_refreshed: '已刷新',
     toast_user_trusted: '已信任用户 {userId}', toast_user_untrusted: '已取消信任用户 {userId}',
     toast_user_blocked: '已拉黑用户 {userId}', toast_user_unblocked: '已解封用户 {userId}',
-    help_title: '🛡️ <b>SafeRelay 管理面板</b>',
+    help_title: '🎛️ <b>SafeRelay 管理面板</b>',
     help_common_title: '<b>常用指令：</b>',
     help_user_mgmt_title: '<b>用户管理（回复消息或指定 ID）：</b>',
     help_msg_settings_title: '<b>消息设置：</b>',
@@ -782,12 +808,12 @@ const I18N = {
     untrust_success: '✅ 已取消信任用户 <code>{id}</code>',
     untrust_hint: '📋 请回复访客消息或发送 /untrust 123456 来取消信任',
     bcancel_done: '✅ 已取消广播',
-    cache_stats_text: '📊 <b>缓存统计信息</b>\n\n<b>L1 内存缓存：</b>\n  命中：{l1Hits}\n  未命中：{l1Misses}\n  命中率：{l1Rate}\n  缓存大小：{l1Size} 条目\n\n<b>L2 KV 缓存：</b>\n  命中：{l2Hits}\n  未命中：{l2Misses}\n  命中率：{l2Rate}\n\n<i>提示：命中率越高，性能越好</i>',
+    cache_stats_text: '🗄️ <b>缓存统计信息</b>\n\n<b>L1 内存缓存：</b>\n  命中：{l1Hits}\n  未命中：{l1Misses}\n  命中率：{l1Rate}\n  缓存大小：{l1Size} 条目\n\n<b>L2 KV 缓存：</b>\n  命中：{l2Hits}\n  未命中：{l2Misses}\n  命中率：{l2Rate}\n\n<i>提示：命中率越高，性能越好</i>',
     clearcache_done: '✅ 已清空所有缓存\n\nL1 内存缓存和统计信息已重置。\nL2 KV 缓存将在到期后自动清理。',
     restore_not_enabled: '⚠️ 垃圾话题功能未启用，无法恢复消息。',
     restore_wrong_topic: '⚠️ 请回复垃圾话题中的消息来恢复。\n\n提示：只有垃圾话题中的消息才能被恢复。',
-    restore_success_topic: '✅ 消息已恢复到访客话题\n\nUID：<code>{uid}</code>\n话题 ID：<code>{topicId}</code>',
-    restore_success_dm: '✅ 消息已恢复并发送给访客\n\nUID：<code>{uid}</code>',
+    restore_success_topic: '✅ 消息已恢复到访客话题\n\n🆔 UID：<code>{uid}</code>\n话题 ID：<code>{topicId}</code>',
+    restore_success_dm: '✅ 消息已恢复并发送给访客\n\n🆔 UID：<code>{uid}</code>',
     restore_no_mapping: '⚠️ 未找到消息映射关系，无法恢复。\n\n可能原因：消息映射已过期（超过 48 小时）或消息不是通过垃圾话题功能转发的。',
     restore_failed: '❌ 恢复消息失败，请稍后重试。',
     invalid_command_topic: '⚠️ 无效命令「{cmd}」\n\n请发送 /help 查看所有可用指令。',
@@ -797,7 +823,7 @@ const I18N = {
     spam_rules_updated: '✅ 垃圾过滤规则已更新',
     cleanup_no_group: '⚠️ 未配置 GROUP_ID 环境变量\n\n话题清理功能仅在使用论坛群组时需要。\n请在 Cloudflare 环境变量中设置 GROUP_ID。',
     cleanup_scan_dry: '🔍 <b>开始扫描失效话题（预览模式）</b>',
-    cleanup_scan: '🧹 <b>开始清理失效话题</b>',
+    cleanup_scan: '♻️ <b>开始清理失效话题</b>',
     cleanup_scanning: '正在扫描用户数据...',
     cleanup_progress: '进度：{done}/{total}\n已发现失效：{invalid}',
     cleanup_progress_cleaned: '已清理：{cleaned}',
@@ -2400,28 +2426,242 @@ function buildUserTopicTitle(userId, profile = null) {
   return title;
 }
 
+// ========== 新用户通知 / 屏蔽通知 ==========
+
+// 验证方式暂存：验证成功路径在处理暂存消息之前写入，话题欢迎卡消费它。
+// 这样无论话题是验证流程创建的、还是暂存消息转发时抢先创建的，卡片都带验证方式且只发一次。
+const pendingVerifyMethod = new Map(); // userId -> { method, ts }
+
+function markPendingVerifyMethod(userId, method) {
+  pendingVerifyMethod.set(String(userId), { method, ts: Date.now() });
+}
+
+function consumePendingVerifyMethod(userId) {
+  const key = String(userId);
+  const entry = pendingVerifyMethod.get(key);
+  if (!entry) return null;
+  pendingVerifyMethod.delete(key);
+  if (Date.now() - entry.ts > 10 * 60 * 1000) return null;
+  return entry.method;
+}
+
+async function isNewUserNotified(userId) {
+  try {
+    return !!(await KV.get(`newuser_notified:${userId}`));
+  } catch (e) {
+    return false;
+  }
+}
+
+async function claimNewUserNotified(userId) {
+  try {
+    await KV.put(`newuser_notified:${userId}`, '1', { expirationTtl: VERIFICATION_TTL });
+  } catch (e) { /* 去重标记失败不阻断通知 */ }
+}
+
+function newUserMethodLabel(lang, method) {
+  if (method === 'turnstile') return t(lang, 'new_user_method_turnstile');
+  if (method === 'both') return t(lang, 'new_user_method_both');
+  return t(lang, 'new_user_method_quiz');
+}
+
+function buildProfileLines(lang, userId, profile) {
+  const displayName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim()
+    || profile?.username || String(userId);
+  const lines = [
+    t(lang, 'new_user_name', { name: escapeHtml(displayName) }),
+    t(lang, 'new_user_uid', { uid: userId })
+  ];
+  if (profile?.username) {
+    lines.push(t(lang, 'new_user_username', { username: escapeHtml(profile.username) }));
+  } else {
+    lines.push(t(lang, 'new_user_no_username'));
+  }
+  return lines;
+}
+
+// 新用户接入卡（RelayGo 风格）：资料 + 验证方式 + 资料/信任/封禁按钮
+function buildNewUserCard(lang, userId, profile, method, { inTopic = false } = {}) {
+  const lines = [
+    t(lang, 'new_user_title'),
+    '',
+    ...buildProfileLines(lang, userId, profile)
+  ];
+  if (method) {
+    lines.push(t(lang, 'new_user_method', { method: newUserMethodLabel(lang, method) }));
+  }
+  lines.push('', t(lang, 'new_user_hint'));
+  if (inTopic) {
+    lines.push(t(lang, 'topic_welcome_hint'));
+  }
+  return {
+    text: lines.join('\n'),
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: t(lang, 'btn_open_profile'), url: `tg://user?id=${userId}` }],
+        [
+          { text: t(lang, 'btn_trust_user'), callback_data: `newuser_trust:${userId}` },
+          { text: t(lang, 'btn_ban_user'), callback_data: `newuser_ban:${userId}` }
+        ]
+      ]
+    }
+  };
+}
+
+function buildBlockedBotCard(lang, userId, profile) {
+  const lines = [
+    t(lang, 'blocked_bot_title'),
+    '',
+    ...buildProfileLines(lang, userId, profile),
+    '',
+    t(lang, 'blocked_bot_note')
+  ];
+  return lines.join('\n');
+}
+
+/**
+ * 新用户完成验证后的通知（去重：每个用户每 VERIFICATION_TTL 周期只通知一次）。
+ * 路由：话题模式 → 立即确保该用户话题存在，卡片发进话题（话题刚创建时由
+ * sendTopicWelcomeMessage 以同一张卡充当欢迎消息，并认领去重标记，本函数不会重复发）；
+ * 私聊模式 → 私发每位管理员（各自的语言）。
+ */
+async function notifyNewUserVerified(userId, profile, method) {
+  const uid = String(userId);
+  try {
+    if (await isNewUserNotified(uid)) {
+      Logger.debug('new_user_notify_deduped', { userId: uid });
+      return;
+    }
+
+    markPendingVerifyMethod(uid, method);
+
+    const topicMode = await isTopicForwardingEnabled();
+    if (topicMode && GROUP_ID) {
+      const ctx = await ensureUserTopic(uid, profile);
+      if (ctx && ctx.threadId) {
+        // 话题刚创建时欢迎卡已发出并认领去重标记 → 不重复发送
+        if (await isNewUserNotified(uid)) return;
+        // 话题早已存在（或欢迎卡未发出）→ 把卡片补发进该话题
+        const lang = await getUserLang(ADMIN_UID);
+        const card = buildNewUserCard(lang, uid, profile, method, { inTopic: true });
+        await sendMessage({
+          chat_id: GROUP_ID,
+          message_thread_id: ctx.threadId,
+          text: card.text,
+          parse_mode: 'HTML',
+          link_preview_options: { is_disabled: true },
+          reply_markup: card.reply_markup
+        });
+        await claimNewUserNotified(uid);
+        return;
+      }
+      // 话题创建失败 → 回退到私聊通知
+      Logger.warn('new_user_notify_topic_fallback_dm', { userId: uid });
+    }
+
+    await claimNewUserNotified(uid);
+    await Promise.all(ADMIN_ID_LIST.map(async adminId => {
+      const adminLang = await getUserLang(adminId);
+      const card = buildNewUserCard(adminLang, uid, profile, method);
+      return sendMessage({
+        chat_id: adminId,
+        text: card.text,
+        parse_mode: 'HTML',
+        link_preview_options: { is_disabled: true },
+        reply_markup: card.reply_markup
+      }).catch(() => { });
+    }));
+  } catch (e) {
+    Logger.error('notify_new_user_failed', e, { userId: uid });
+  }
+}
+
+/**
+ * 处理 my_chat_member 更新：仅私聊场景（访客与机器人的一对一会话）。
+ * 访客屏蔽机器人（member → kicked）→ 通知管理员（去重，bot_blocked:<uid> 标记）；
+ * 取消屏蔽（kicked → member）→ 静默清除标记。群组内的成员变动与本功能无关，全部忽略。
+ */
+async function handleMyChatMember(myChatMember) {
+  try {
+    const chat = myChatMember?.chat;
+    const from = myChatMember?.from;
+    if (!chat || chat.type !== 'private' || !from) return;
+
+    const userId = String(from.id);
+    if (String(chat.id) !== userId) return; // 只处理访客本人的一对一会话
+    if (isAdmin(userId)) return;
+
+    const oldStatus = myChatMember.old_chat_member?.status;
+    const newStatus = myChatMember.new_chat_member?.status;
+
+    if (newStatus === 'member' && oldStatus === 'kicked') {
+      await KV.delete(`bot_blocked:${userId}`).catch(() => { });
+      Logger.info('bot_unblocked_by_user', { userId });
+      return;
+    }
+
+    if (newStatus !== 'kicked' || oldStatus === 'kicked') return;
+
+    const already = await KV.get(`bot_blocked:${userId}`);
+    if (already) return; // 已通知过，去重
+    await KV.put(`bot_blocked:${userId}`, String(Date.now()));
+
+    const profile = (await getUserProfile(userId)) || from;
+    Logger.info('bot_blocked_by_user', { userId });
+
+    // 路由：话题模式且该用户话题已存在 → 发进话题（不新建话题）；否则私发管理员
+    const topicMode = await isTopicForwardingEnabled();
+    let postedToTopic = false;
+    if (topicMode && GROUP_ID) {
+      const userData = await safeGetJSON(`user:${userId}`, null);
+      if (userData && userData.thread_id) {
+        const lang = await getUserLang(ADMIN_UID);
+        await sendMessage({
+          chat_id: GROUP_ID,
+          message_thread_id: userData.thread_id,
+          text: buildBlockedBotCard(lang, userId, profile),
+          parse_mode: 'HTML',
+          link_preview_options: { is_disabled: true }
+        }).catch(() => { });
+        postedToTopic = true;
+      }
+    }
+
+    if (!postedToTopic) {
+      await Promise.all(ADMIN_ID_LIST.map(async adminId => {
+        const adminLang = await getUserLang(adminId);
+        return sendMessage({
+          chat_id: adminId,
+          text: buildBlockedBotCard(adminLang, userId, profile),
+          parse_mode: 'HTML',
+          link_preview_options: { is_disabled: true }
+        }).catch(() => { });
+      }));
+    }
+  } catch (e) {
+    Logger.error('handle_my_chat_member_failed', e);
+  }
+}
+
 async function sendTopicWelcomeMessage(threadId, userId, profile = null) {
   if (!GROUP_ID) return;
   try {
     const lang = await getUserLang(ADMIN_UID);
-    const lines = [
-      t(lang, 'topic_welcome_title'),
-      t(lang, 'topic_welcome_uid', { uid: userId })
-    ];
-    if (profile?.username) {
-      lines.push(t(lang, 'topic_welcome_username', { username: escapeHtml(profile.username) }));
-    }
-    if (profile?.first_name || profile?.last_name) {
-      lines.push(t(lang, 'topic_welcome_nickname', { name: escapeHtml(`${profile.first_name || ''} ${profile.last_name || ''}`.trim()) }));
-    }
-    lines.push('\n' + t(lang, 'topic_welcome_hint'));
+    // 若该话题是验证流程触发创建的，欢迎消息就是新用户接入卡（带验证方式）；
+    // 消费掉暂存的验证方式并认领去重标记，notifyNewUserVerified 不会重复发送。
+    const method = consumePendingVerifyMethod(userId);
+    const card = buildNewUserCard(lang, userId, profile, method, { inTopic: true });
     await sendMessage({
       chat_id: GROUP_ID,
       message_thread_id: threadId,
-      text: lines.join('\n'),
+      text: card.text,
       parse_mode: 'HTML',
-      link_preview_options: { is_disabled: true }
+      link_preview_options: { is_disabled: true },
+      reply_markup: card.reply_markup
     });
+    if (method) {
+      await claimNewUserNotified(userId);
+    }
   } catch (e) {
     Logger.warn('topic_welcome_message_failed', e, { userId, threadId });
   }
@@ -4581,6 +4821,11 @@ function buildReplyQuoteParams(message) {
 }
 
 async function onUpdate(update, origin) {
+  // 访客屏蔽/取消屏蔽机器人（my_chat_member）：在其他分支之前处理，内部只认私聊
+  if ('my_chat_member' in update) {
+    return handleMyChatMember(update.my_chat_member);
+  }
+
   if ('callback_query' in update) {
     const callbackQuery = update.callback_query;
     const userId = String(callbackQuery.from.id);
@@ -4882,8 +5127,7 @@ async function getTargetId(message, commandName) {
   const contextChatId = message.chat?.id ? String(message.chat.id) : null;
 
   // 【话题模式支持】如果消息来自话题，直接从话题 ID 获取用户 UID
-  const isTopicMode = await isTopicForwardingEnabled();
-  if (isTopicMode && contextChatId === GROUP_ID && message.message_thread_id) {
+  if (contextChatId === GROUP_ID && message.message_thread_id) {
     const threadId = message.message_thread_id;
     const userId = await KV.get(`thread:${threadId}`);
     if (userId) {
@@ -4980,7 +5224,7 @@ async function generateMainMenu(lang) {
   const setNot = (v) => v ? `🟢 ${t(L, 'set')}` : `🔴 ${t(L, 'not_set')}`;
   const unionOn = (unionBanEnabled === '1' || unionBanEnabled === 'true');
   const forwardLabel = forwardMode === FORWARD_MODES.TOPIC ? t(L, 'menu_forward_topic') : t(L, 'menu_forward_direct');
-  const text = `${t(L, 'menu_title')}\n\n${t(L, 'menu_current_config')}\n🛡️ ${t(L, 'menu_verify_mode', { mode: getVerifyModeName(verifyMode, L) })}\n🧹 ${t(L, 'menu_spam_filter', { status: onOff(spamFilterEnabled) })}\n🤖 ${t(L, 'menu_ai_detection', { status: onOff(aiConfig.enabled) })}\n🌐 ${t(L, 'menu_union_ban', { status: onOff(unionOn) })}\n👋 ${t(L, 'menu_welcome_msg', { status: setNot(!!welcomeMsg) })}\n✉️ ${t(L, 'menu_auto_reply', { status: setNot(!!autoReplyMsg) })}\n💬 ${t(L, 'menu_forward_mode', { mode: forwardLabel })}\n\n${t(L, 'menu_tap_below')}`;
+  const text = `${t(L, 'menu_title')}\n\n${t(L, 'menu_current_config')}\n🔐 ${t(L, 'menu_verify_mode', { mode: getVerifyModeName(verifyMode, L) })}\n🧹 ${t(L, 'menu_spam_filter', { status: onOff(spamFilterEnabled) })}\n🧠 ${t(L, 'menu_ai_detection', { status: onOff(aiConfig.enabled) })}\n🌐 ${t(L, 'menu_union_ban', { status: onOff(unionOn) })}\n👋 ${t(L, 'menu_welcome_msg', { status: setNot(!!welcomeMsg) })}\n✉️ ${t(L, 'menu_auto_reply', { status: setNot(!!autoReplyMsg) })}\n💬 ${t(L, 'menu_forward_mode', { mode: forwardLabel })}\n\n${t(L, 'menu_tap_below')}`;
   const keyboard = {
     inline_keyboard: [
       [{ text: t(L, 'btn_verify_mode'), callback_data: 'submenu_verify' }, { text: t(L, 'btn_spam_filter'), callback_data: 'submenu_spam' }],
@@ -5305,7 +5549,7 @@ async function generateUserActionSubmenu(userId, page, filter, lang) {
   const statusIcon = blocked ? '🚫' : (whitelisted ? '⭐' : '👤');
   const statusText = blocked ? t(L, 'user_status_blocked') : (whitelisted ? t(L, 'user_status_trusted') : t(L, 'user_status_normal'));
   let text = `👤 <b>${escapeHtml(displayName)}</b>\n═══════════════\n\n${t(L, 'user_uid_line', { uid: userId })}`;
-  if (usernameStr) text += `\n📎 ${escapeHtml(usernameStr)}`;
+  if (usernameStr) text += `\n🏷️ ${escapeHtml(usernameStr)}`;
   text += `\n${t(L, 'user_status_line', { icon: statusIcon, status: statusText })}\n\n${t(L, 'user_choose_action')}`;
   const actionButtons = [];
   if (whitelisted) {
@@ -5362,6 +5606,25 @@ async function handleAdminCallback(callbackQuery) {
   // 空操作（页码显示按钮等）
   if (data === 'noop') {
     return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id });
+  }
+
+  // 新用户卡片快捷操作（⭐ 信任 / 🚫 封禁；私聊与群组话题里点击均可）
+  if (data.startsWith('newuser_trust:') || data.startsWith('newuser_ban:')) {
+    const targetId = data.split(':')[1];
+    if (data.startsWith('newuser_trust:')) {
+      await addToWhitelist(targetId);
+      return requestTelegram('answerCallbackQuery', {
+        callback_query_id: callbackQuery.id,
+        text: t(lang, 'toast_newuser_trusted', { userId: targetId })
+      });
+    }
+    await KV.put('blocked-' + targetId, 'true');
+    await invalidateBlockedCache(targetId);
+    await removeVerifiedUser(targetId);
+    return requestTelegram('answerCallbackQuery', {
+      callback_query_id: callbackQuery.id,
+      text: t(lang, 'toast_newuser_banned', { userId: targetId })
+    });
   }
 
   // 返回主菜单
@@ -5446,6 +5709,7 @@ async function handleAdminCallback(callbackQuery) {
 
     await requestTelegram('sendMessage', {
       chat_id: chatId,
+      ...(callbackQuery.message.message_thread_id ? { message_thread_id: callbackQuery.message.message_thread_id } : {}),
       text: `${t(lang, 'kw_list_title')}\n<pre>${escapeHtml(allKeywords)}</pre>`,
       parse_mode: 'HTML'
     });
@@ -5835,7 +6099,7 @@ async function handleAdminCallback(callbackQuery) {
   if (data === 'ai_confidence') {
     const text = t(lang, 'ai_confidence_prompt', { value: (await getAISpamDetectionConfig()).confidenceThreshold || 0.7 });
 
-    await KV.put(`ai_confidence_wait:${chatId}`, '1', { expirationTtl: 120 });
+    await KV.put(`ai_confidence_wait:${adminChatId}`, '1', { expirationTtl: 120 });
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -6165,7 +6429,7 @@ ${t(lang, 'st_view_actions')}`;
     await requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: t(lang, 'toast_bc_sending') });
 
     const result = await sendBroadcastBatch(broadcastMsg, offset, 500);
-    const statusIcon = result.timedOut ? '⚠️' : '✅';
+    const statusIcon = result.timedOut ? '⚠️' : '📣';
     const statusText = result.timedOut ? t(lang, 'broadcast_title_partial') : t(lang, 'broadcast_title_done');
 
     // 构建按钮
@@ -6215,7 +6479,9 @@ async function handleAdminMessage(message) {
 
   // 【话题模式支持】检测是否在话题中发送消息
   const isTopicMode = await isTopicForwardingEnabled();
-  const isInTopic = isTopicMode && contextChatId === GROUP_ID && message.message_thread_id;
+  // 只要消息来自论坛群组，就在本群组/话题内执行命令与回复（不再依赖转发模式开关）
+  const isGroupContext = !!(GROUP_ID && contextChatId === String(GROUP_ID));
+  const isInTopic = isGroupContext && !!message.message_thread_id;
   const isInGeneralTopic = isInTopic && message.message_thread_id === 1; // General 话题 ID 为 1
 
   Logger.info('admin_message_context', {
@@ -6230,11 +6496,10 @@ async function handleAdminMessage(message) {
 
   // 辅助函数：获取回复目标（话题模式或私聊模式）
   const getReplyTarget = () => {
-    if (isInTopic) {
-      return {
-        chat_id: contextChatId,
-        message_thread_id: message.message_thread_id
-      };
+    if (isGroupContext) {
+      const target = { chat_id: contextChatId };
+      if (message.message_thread_id) target.message_thread_id = message.message_thread_id;
+      return target;
     }
     return {
       chat_id: adminChatId
@@ -6408,6 +6673,24 @@ async function handleAdminMessage(message) {
     await setBotCommands();
     // 直接 fall through 到 /help，显示完整的帮助信息
     text = '/help'; // 让后续匹配命中 /help
+  }
+
+  // 【话题模式】话题转发开启时，私聊里的 /menu、/help 改为引导去群组 General 话题，
+  // 保证所有管理员用的是群组里的同一个面板（/start 会落到 /help，同样适用）
+  if ((text === '/menu' || text === '/help') && message.chat?.type === 'private' && isTopicMode && GROUP_ID) {
+    const redirectPayload = {
+      chat_id: adminChatId,
+      text: t(lang, 'panel_topic_redirect'),
+      parse_mode: 'HTML'
+    };
+    if (/^-100\d+$/.test(String(GROUP_ID))) {
+      redirectPayload.reply_markup = {
+        inline_keyboard: [[
+          { text: t(lang, 'btn_open_group'), url: `https://t.me/c/${String(GROUP_ID).slice(4)}/1` }
+        ]]
+      };
+    }
+    return sendMessage(redirectPayload);
   }
 
   // 指令：/help - 显示帮助信息
@@ -6692,7 +6975,7 @@ async function handleAdminMessage(message) {
 
     // 发送第一批（500人）
     const result = await sendBroadcastBatch(broadcastMsg, 0, 500);
-    const statusIcon = result.timedOut ? '⚠️' : '✅';
+    const statusIcon = result.timedOut ? '⚠️' : '📣';
     const statusText = result.timedOut ? t(lang, 'broadcast_title_partial') : t(lang, 'broadcast_title_done');
 
     // 构建按钮
@@ -6751,7 +7034,7 @@ async function handleAdminMessage(message) {
     const dryRun = args.includes('--dry-run') || args.includes('-n');
     const cleanAll = args.includes('--all') || args.includes('-a');
 
-    return handleCleanupCommand(message, { dryRun, cleanAll }, adminChatId);
+    return handleCleanupCommand(message, { dryRun, cleanAll }, adminChatId, getReplyTarget());
   }
 
   // 指令：/cachestats - 查看缓存统计
@@ -6963,15 +7246,17 @@ async function handleAdminMessage(message) {
 }
 
 // 批量清理失效的话题映射
-async function handleCleanupCommand(message, options = {}, overrideChatId = null) {
+async function handleCleanupCommand(message, options = {}, overrideChatId = null, overrideTarget = null) {
   const { dryRun = false, cleanAll = false } = options;
   const adminChatId = overrideChatId || (message.chat?.id ? String(message.chat.id) : ADMIN_UID);
+  // 进度与结果发回命令被调用的会话（私聊或群组话题），不再固定发管理员私聊
+  const replyTarget = overrideTarget || { chat_id: adminChatId };
   const groupId = getEnv('GROUP_ID');
   const lang = await getUserLang(adminChatId);
 
   if (!groupId) {
     return sendMessage({
-      chat_id: adminChatId,
+      ...replyTarget,
       text: t(lang, 'cleanup_no_group')
     });
   }
@@ -6979,7 +7264,7 @@ async function handleCleanupCommand(message, options = {}, overrideChatId = null
   // 发送开始通知
   const startMsg = dryRun ? t(lang, 'cleanup_scan_dry') : t(lang, 'cleanup_scan');
   const progressMsg = await sendMessage({
-    chat_id: adminChatId,
+    ...replyTarget,
     text: `${startMsg}\n\n${t(lang, 'cleanup_scanning')}`,
     parse_mode: 'HTML'
   });
@@ -7055,7 +7340,7 @@ async function handleCleanupCommand(message, options = {}, overrideChatId = null
         // 每 100 个用户更新一次进度
         if ((i + 1) % 100 === 0) {
           await requestTelegram('editMessageText', {
-            chat_id: adminChatId,
+            chat_id: replyTarget.chat_id,
             message_id: progressMsg.result.message_id,
             text: `${startMsg}\n\n${t(lang, 'cleanup_progress', { done: i + 1, total: userKeys.length, invalid: invalidCount })}${!dryRun ? `\n${t(lang, 'cleanup_progress_cleaned', { cleaned: cleanedCount })}` : ''}`,
             parse_mode: 'HTML'
@@ -7094,14 +7379,14 @@ async function handleCleanupCommand(message, options = {}, overrideChatId = null
       const moreText = invalidUsers.length > detailLimit ? `\n${t(lang, 'cleanup_more', { count: invalidUsers.length - detailLimit })}` : '';
 
       await requestTelegram('editMessageText', {
-        chat_id: adminChatId,
+        chat_id: replyTarget.chat_id,
         message_id: progressMsg.result.message_id,
         text: `${resultText}\n\n${t(lang, 'cleanup_invalid_list_title')}\n${details}${moreText}`,
         parse_mode: 'HTML'
       });
     } else {
       await requestTelegram('editMessageText', {
-        chat_id: adminChatId,
+        chat_id: replyTarget.chat_id,
         message_id: progressMsg.result.message_id,
         text: resultText,
         parse_mode: 'HTML'
@@ -7119,7 +7404,7 @@ async function handleCleanupCommand(message, options = {}, overrideChatId = null
   } catch (e) {
     Logger.error('cleanup_failed', e);
     await requestTelegram('editMessageText', {
-      chat_id: adminChatId,
+      chat_id: replyTarget.chat_id,
       message_id: progressMsg.result.message_id,
       text: t(lang, 'cleanup_failed', { error: e.message }),
       parse_mode: 'HTML'
@@ -7680,6 +7965,10 @@ async function handleVerifyCallback(request) {
       await upsertUserProfileFromUpdate(userInfo);
     }
 
+    const turnstileVerifyMode = await getVerifyMode();
+    const turnstileMethod = turnstileVerifyMode === 'both' ? 'both' : 'turnstile';
+    markPendingVerifyMethod(uid, turnstileMethod);
+
     const pendingResult = await processPendingMessagesAfterVerification(uid);
     Logger.info('turnstile_verification_success', { userId: uid, pendingForwarded: pendingResult.forwarded });
 
@@ -7693,33 +7982,8 @@ async function handleVerifyCallback(request) {
       text: successMsg
     });
 
-    // 【话题模式】检查是否启用了话题模式
-    const topicModeEnabled = await isTopicForwardingEnabled();
-    if (topicModeEnabled && GROUP_ID) {
-      // 话题模式：在创建话题时发送欢迎消息，这里不发送到管理员私聊
-      Logger.info('topic_mode_enabled_skip_admin_notify', { userId: uid });
-    } else {
-      // 私聊模式：发送到管理员私聊
-      let usernameLine = '';
-      if (userInfo && userInfo.username) {
-        usernameLine = `
-📎 @${escapeHtml(userInfo.username)}`;
-      }
-      await Promise.all(ADMIN_ID_LIST.map(async adminId => {
-        const adminLang = await getUserLang(adminId);
-        return requestTelegram('sendMessage', {
-          chat_id: adminId,
-          text: `${t(adminLang, 'verify_admin_notify')}\n\n🆔 <code>${uid}</code> (${escapeHtml(displayName)})${usernameLine}`,
-          parse_mode: 'HTML',
-          link_preview_options: { is_disabled: true },
-          reply_markup: {
-            inline_keyboard: [[
-              { text: t(adminLang, 'btn_open_profile'), url: `tg://user?id=${uid}` }
-            ]]
-          }
-        });
-      }));
-    }
+    // 新用户接入通知（统一走 notifyNewUserVerified：按转发模式路由 + 去重）
+    await notifyNewUserVerified(uid, userInfo || await getUserProfile(uid), turnstileMethod);
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
@@ -8327,7 +8591,8 @@ async function registerWebhook(event, requestUrl, suffix, secret) {
     'message',
     'edited_message',
     'callback_query',
-    'message_reaction'
+    'message_reaction',
+    'my_chat_member'
   ]);
   const r = await (await fetch(apiUrl('setWebhook', { url: webhookUrl, secret_token: secret, allowed_updates: allowedUpdates }))).json();
 
@@ -8416,6 +8681,12 @@ async function handleQuizCallback(callbackQuery) {
       // 缓存用户资料
       await upsertUserProfileFromUpdate(user);
 
+      // 记录验证方式（必须在处理暂存消息之前：暂存转发可能抢先创建话题并发出欢迎卡，
+      // 欢迎卡会消费这里暂存的方式并认领通知去重标记）
+      const quizVerifyMode = await getVerifyMode();
+      const quizMethod = quizVerifyMode === 'both' ? 'both' : 'quiz';
+      markPendingVerifyMethod(userId, quizMethod);
+
       // 处理暂存的消息
       let pendingResult = { forwarded: 0, failed: 0 };
       try {
@@ -8465,6 +8736,9 @@ async function handleQuizCallback(callbackQuery) {
       } catch (e) {
         Logger.error('record_active_user_failed', e, { userId });
       }
+
+      // 新用户接入通知（按转发模式路由，去重）
+      await notifyNewUserVerified(userId, user, quizMethod);
 
       return await requestTelegram('answerCallbackQuery', {
         callback_query_id: callbackQuery.id,
