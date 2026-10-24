@@ -1,7 +1,7 @@
 /**
- * SafeRelay - Telegram 私聊机器人
+ * SafeRelay - Telegram Private Chat Relay Bot
  * 项目地址: https://github.com/qianqi32/SafeRelay
- * 版本: 1.0.8
+ * 版本: 1.1.0
  * 当前版本可能仍不稳定，如遇到 BUG 请提交至 issues 或者直接联系 @KiyukieBot
 */
 
@@ -27,6 +27,862 @@ const GROUP_ID = (() => {
   const normalized = String(value).trim();
   return normalized ? normalized : null;
 })();
+
+// ========== Internationalization (i18n) ==========
+// Default language is English. Users can switch per-user with /language.
+// The choice is stored in KV as `lang:<userId>`. Telegram's language_code
+// is intentionally NOT used to auto-switch: the bot stays in English
+// until the user (or DEFAULT_LANG / BOT_LANG) says otherwise.
+const SUPPORTED_LANGS = ['en', 'zh'];
+const langCache = new Map();
+
+function normalizeLang(value) {
+  if (!value || typeof value !== 'string') return null;
+  const v = value.trim().toLowerCase().replace('_', '-');
+  if (v === 'en' || v.startsWith('en-')) return 'en';
+  if (v === 'zh' || v.startsWith('zh-') || v.startsWith('zh')) return 'zh';
+  return null;
+}
+
+function getDefaultLang() {
+  return normalizeLang(getEnv('DEFAULT_LANG') || getEnv('BOT_LANG')) || 'en';
+}
+
+async function getUserLang(userId) {
+  const fallback = getDefaultLang();
+  if (userId === null || userId === undefined || userId === '') return fallback;
+  const id = String(userId);
+  if (langCache.has(id)) return langCache.get(id);
+  try {
+    if (typeof KV !== 'undefined' && KV) {
+      const stored = await KV.get('lang:' + id);
+      const lang = normalizeLang(stored) || fallback;
+      langCache.set(id, lang);
+      return lang;
+    }
+  } catch (e) { /* fall through to default */ }
+  return fallback;
+}
+
+async function setUserLang(userId, lang) {
+  const normalized = normalizeLang(lang) || getDefaultLang();
+  if (userId === null || userId === undefined || userId === '') return normalized;
+  const id = String(userId);
+  langCache.set(id, normalized);
+  try { await KV.put('lang:' + id, normalized); } catch (e) { /* cache still applies */ }
+  return normalized;
+}
+
+const I18N = {
+  en: {
+    on: 'On', off: 'Off', set: 'Set', not_set: 'Not Set',
+    guest_welcome_whitelisted: '👋 Welcome to SafeRelay!\n\nYou are on the trusted list, so you can message the admin directly.',
+    guest_welcome_verified: '👋 Welcome to SafeRelay!\n\nYou are verified. You can now message the admin directly.',
+    guest_blocked: '🚫 You have been blocked by the admin and cannot send messages.',
+    guest_union_banned: '🚫 <b>You are federation-banned.</b>\n\nYour account was banned globally for violating the terms of service. Please contact the admin if you have questions.',
+    guest_fraud_blocked: '🚫 <b>Service Unavailable</b>\n\nYour account was flagged as abnormal and cannot use this service.',
+    admin_fraud_detected: '🚨 <b>Fraudulent User Detected</b>\n\nUID: <code>{uid}</code>\nThis user is in the fraud database and was blocked automatically.',
+    guest_spam_blocked: '🚫 Your message was blocked for violating the rules. Please contact the admin if you have questions.',
+    guest_spam_fake_sent: '✅ Message sent',
+    admin_spam_intercepted: '🧹 <b>Spam Message Blocked</b>\n\nUID: <code>{uid}</code>\nReason: {reason}\n\n<i>The message was blocked and not forwarded to the admin.</i>',
+    guest_rate_limited: '⚠️ You are sending messages too fast. Please wait {seconds} seconds and try again.',
+    spam_reason_links: 'Too many links ({count}/{max})',
+    spam_reason_keyword: 'Blocked keyword: {keyword}',
+    spam_reason_regex: 'Matched a blocked pattern',
+    spam_reason_ai: 'Flagged as spam by AI',
+    verification_expired_notice: '⚠️ <b>Verification Expired</b>\n\nYour topic may have been deleted or expired, so you need to verify again.\n\nPlease tap /start to restart verification.',
+    kv_quota_notice: '⚠️ <b>KV Quota Exceeded</b>\n\nCloudflare KV requests are being rate-limited (429), so KV operations were paused automatically.\nPlease try again later, or check KV usage in the Cloudflare dashboard.',
+    topic_recover_notice: '⚠️ The topic for guest {userId} is no longer valid. Trying to recreate it.',
+    error_report: '🚨 <b>SafeRelay Error Report</b>\n\n<b>Context:</b> {context}\n<b>Error:</b> {error}\n<b>Time:</b> {time}',
+    topic_env_notice: '[Notice] Topic mode is unavailable: {issue}',
+    topic_issue_group_missing: 'GROUP_ID is not configured.',
+    topic_issue_chat_inaccessible: 'the bot cannot access the configured group ({description}).',
+    topic_issue_not_forum: 'the target group has not enabled Topics.',
+    topic_issue_not_admin: 'the bot is not an administrator in the group.',
+    topic_issue_missing_manage_topics: 'the bot is missing the Manage Topics permission.',
+    topic_issue_membership: 'unable to read bot permissions: {description}.',
+    topic_issue_default: 'unexpected error while checking the forum group.',
+    err_generic: 'Operation failed',
+    err_message_not_found: 'The message does not exist or has expired',
+    err_empty_message: 'Message content cannot be empty',
+    err_message_too_long: 'Message content is too long',
+    err_chat_not_found: 'Chat not found',
+    err_bot_blocked: 'You have blocked the bot. Please unblock it and try again',
+    err_user_deactivated: 'The user account has been deactivated',
+    err_permission_denied: 'Insufficient permissions',
+    err_rate_limited: 'Too many requests. Please try again later',
+    err_network_error: 'Network error. Please try again later',
+    err_auth_error: 'Authentication failed. Please check the configuration',
+    err_timeout: 'Request timed out. Please try again later',
+    mode_local_quiz: '📝 Local Quiz',
+    mode_turnstile: '☁️ Turnstile',
+    mode_both: '🔒 Quiz + Turnstile',
+    quiz_expired: 'Verification expired. Please request a new question.',
+    quiz_max_attempts: 'Too many attempts. Please request a new question.',
+    quiz_wrong: 'Wrong answer. {remaining} attempt(s) left.',
+    quiz_lock_wait: '⏳ Verification is in progress. Please wait {seconds} seconds and try again.',
+    quiz_invalid_data: '❌ Invalid data format',
+    quiz_invalid_option: '❌ Invalid option',
+    quiz_attempt_rate: '⏳ Too many attempts. Please wait {seconds} seconds and try again.',
+    quiz_success_toast: 'Verification passed!',
+    quiz_success_msg: '✅ Verification passed! You can now message the admin.',
+    quiz_success_pending: '✅ Verification passed!\n\n📩 Your {count} queued message(s) were delivered to the admin.',
+    quiz_error: '❌ Something went wrong during verification. Please try again.',
+    verify_mode_switch_failed: '❌ Cannot switch to this mode. Please make sure the Turnstile keys are configured.',
+    verify_mode_switched: 'Switched to: {mode}',
+    verify_pending_queued: '📝 Message queued. It will be sent automatically after verification (up to {max} messages).',
+    verify_too_frequent: '⏳ Too many verification attempts. Please try again in 5 minutes.',
+    verify_session_failed: '⚠️ Could not create a verification session. Please try again later.',
+    verify_quiz_with_welcome: '🛡️ Please answer the question below to continue:',
+    verify_quiz_default: '🛡️ To prevent spam, please answer the question below:',
+    verify_both_with_welcome: '🛡️ Please complete both verification steps below to continue:',
+    verify_both_default: '🛡️ To prevent spam, please complete both verification steps below:',
+    verify_turnstile_with_welcome: '🛡️ Please complete the verification below to continue:',
+    verify_turnstile_default: '🛡️ To prevent spam, please tap the button below to complete human verification:',
+    btn_verify_turnstile: '🛡️ Start Verification',
+    turnstile_success: '✅ Verification passed!\n\nIf you verified more than once, please wait a minute before sending a message so the status can sync.',
+    turnstile_success_pending: '✅ Verification passed!\n\n📩 Your {count} queued message(s) were delivered to the admin.',
+    verify_admin_notify: '✅ <b>New User Verified</b>',
+    btn_open_profile: '👤 Open Profile',
+    verify_not_configured: 'Turnstile is not configured',
+    verify_page_title: 'Human Verification - SafeRelay',
+    verify_page_heading: 'Security Verification',
+    verify_page_subtitle: 'Please complete the verification below to continue',
+    verify_page_success: 'Verification passed!',
+    verify_page_success_desc: 'Please return to Telegram to continue chatting',
+    verify_page_error: 'Verification failed',
+    verify_page_error_desc: 'Please try again or refresh the page',
+    verify_page_retry: 'Try Again',
+    verify_page_footer: 'Powered by SafeRelay',
+    verify_page_loading: 'Verifying...',
+    spam_topic_name: '🗑️ Spam Bin',
+    spam_silently_handled: '🗑️ <b>Spam Message Handled Silently</b>\n\nUID: <code>{uid}</code>\nTopic ID: <code>{topicId}</code>\n\n<i>The message was moved to the spam topic. The user was not notified.</i>',
+    topic_welcome_title: '👤 <b>New Guest Conversation</b>',
+    topic_welcome_uid: 'UID: <code>{uid}</code>',
+    topic_welcome_username: 'Username: @{username}',
+    topic_welcome_nickname: 'Name: {name}',
+    topic_welcome_hint: 'Reply in this topic to respond to the guest.',
+    guest_default_name: 'Guest',
+    rules_link_limit: '<b>Link Limit:</b> Up to {max} links',
+    rules_block_keywords: '<b>Blocked Keywords ({count}):</b>',
+    rules_block_regex: '<b>Blocked Patterns ({count}):</b>',
+    rules_allow_keywords: '<b>Allowed Keywords:</b> {keywords}',
+    rules_more: '... and {count} more in total',
+    keyword_empty: '<i>(empty)</i>',
+    keyword_more: '... and {count} more',
+    forward_failed: '❌ Failed to forward the message: {error}',
+    forward_failed_topic_hint: 'Please check that the bot is a group admin and that Topics are enabled.',
+    forward_all_admins_blocked: '⚠️ Failed to send: all admins have blocked the bot, so no one can receive messages.',
+    edit_expired: '⚠️ Could not edit the message: it has expired or was deleted (over 48 hours).\n\nPlease send a new message instead.',
+    edit_failed: '⚠️ Failed to edit the message: {error}\n\nPlease send a new message instead.',
+    edit_process_failed: '❌ Failed to process the edited message: {error}',
+    edit_no_mapping: '⚠️ No message mapping found, so the edit cannot be synced to the guest.\n\nPossible reasons: the message expired (over 48 hours) or the bot was restarted.',
+    edit_no_text: '(no text content)',
+    language_title: '🌍 <b>Language / 语言</b>',
+    language_prompt: '🌍 <b>Language</b>\n\nCurrent language: <b>{current}</b>\n\nChoose your language:',
+    language_current_en: 'English',
+    language_current_zh: '简体中文',
+    language_changed: '✅ Language switched to English.',
+    btn_language: '🌍 Language',
+    btn_english: 'English',
+    btn_chinese: '简体中文',
+    menu_title: '🛡️ <b>SafeRelay Admin Panel</b>',
+    menu_current_config: '📊 <b>Current Settings:</b>',
+    menu_verify_mode: 'Verification: {mode}',
+    menu_spam_filter: 'Spam Filter: {status}',
+    menu_ai_detection: 'AI Detection: {status}',
+    menu_union_ban: 'Federation Ban: {status}',
+    menu_welcome_msg: 'Welcome Message: {status}',
+    menu_auto_reply: 'Auto-Reply: {status}',
+    menu_forward_mode: 'Forwarding: {mode}',
+    menu_forward_topic: '💬 Forum Topics',
+    menu_forward_direct: '📥 Direct Messages',
+    menu_tap_below: 'Tap a button below to open its settings.',
+    btn_verify_mode: '🛡️ Verification',
+    btn_spam_filter: '🧹 Spam Filter',
+    btn_ai_detection: '🤖 AI Detection',
+    btn_spam_topic: '🗑️ Spam Topic',
+    btn_union_ban: '🌐 Federation Ban',
+    btn_users: '👥 Users',
+    btn_welcome: '👋 Welcome Message',
+    btn_autoreply: '✉️ Auto-Reply',
+    btn_forward_mode: '💬 Forwarding',
+    btn_stats: '📊 Statistics',
+    btn_back_main: '◀️ Back to Main Menu',
+    btn_refresh: '🔄 Refresh',
+    spam_title: '🧹 <b>Spam Filter Settings</b>',
+    spam_status: 'Status: <b>{status}</b>',
+    spam_current_rules: '<b>Current Rules:</b>',
+    spam_quick_actions: '<b>Quick Actions:</b>\n• Send a keyword to add a block rule\n• Send <code>clear defaults</code> or <code>清空默认</code> to clear all default rules\n• Send <code>max_links:N</code> to set the link limit\n• Send <code>allow:keyword</code> to add an allow rule',
+    spam_multiline_note: '💡 You can send multiple lines at once, one rule per line.',
+    status_on_icon: '🟢 On', status_off_icon: '🔴 Off',
+    btn_spam_on: '🟢 Turn On Filter', btn_spam_off: '🔴 Turn Off Filter',
+    btn_manage_keywords: '🔑 Manage Keywords',
+    btn_reset_rules: '🔄 Reset to Defaults',
+    btn_back_spam: '◀️ Back to Spam Filter',
+    toast_keywords_cleared: '✅ All blocked keywords and patterns cleared',
+    toast_spam_on: 'Spam filter turned on', toast_spam_off: 'Spam filter turned off',
+    toast_rules_reset: 'Reset to default rules',
+    kw_title: '🔑 <b>Keyword Rules</b>',
+    kw_block_keywords: '<b>Blocked Keywords ({count}):</b>',
+    kw_allow_keywords: '<b>Allowed Keywords ({count}):</b>',
+    kw_block_regex: '<b>Blocked Patterns ({count}):</b>',
+    kw_allow_regex: '<b>Allowed Patterns ({count}):</b>',
+    kw_howto: '<b>How to Manage:</b>\n• Add a blocked keyword: send the keyword directly\n• Add an allowed keyword: <code>allow:keyword</code>\n• Add a pattern: <code>regex:pattern</code>\n• Delete a blocked keyword: <code>del:keyword</code>\n• Delete an allowed keyword: <code>delallow:keyword</code>\n• Clear all: <code>clear defaults</code> or <code>清空默认</code>',
+    kw_note: '💡 Keywords and patterns take effect immediately.',
+    btn_view_all_keywords: '📋 View Full List',
+    btn_clear_keywords: '🗑️ Clear Blocked Keywords',
+    kw_list_title: '<b>Full Rule List:</b>',
+    kw_section_block: '=== Blocked Keywords ===',
+    kw_section_allow: '=== Allowed Keywords ===',
+    kw_section_block_re: '=== Blocked Patterns ===',
+    kw_section_allow_re: '=== Allowed Patterns ===',
+    ai_title: '🤖 <b>AI Spam Detection</b>',
+    ai_status: 'Status: <b>{status}</b>',
+    ai_config_title: '<b>Configuration:</b>',
+    ai_threshold: 'Confidence Threshold: {value}',
+    ai_hourly_limit: 'Hourly Limit: {limit} checks',
+    ai_remaining: 'Remaining This Hour: {remaining}',
+    ai_reset_in: 'Resets In: {seconds}s',
+    ai_howto: '<b>How It Works:</b>\n• AI detection complements keyword filtering\n• It flags ads, promotions, investment scams, and similar spam\n• Requires Cloudflare Workers AI',
+    ai_env_title: '<b>Environment Variables:</b>',
+    ai_tip: '💡 Tip: Use keyword filtering first, and keep AI as a fallback.',
+    btn_ai_on: '🟢 Turn On AI Detection', btn_ai_off: '🔴 Turn Off AI Detection',
+    btn_ai_confidence: '⚙️ Adjust Threshold', btn_ai_stats: '📊 Usage Stats',
+    toast_ai_on: 'AI detection turned on', toast_ai_off: 'AI detection turned off',
+    ai_stats_alert: '📊 AI Usage Stats\nUsed this hour: {used}/{limit}\nRemaining: {remaining}\nResets in: {reset}s',
+    ai_confidence_prompt: '⚙️ <b>Adjust AI Threshold</b>\n\nCurrent threshold: <code>{value}</code>\n\nSend a new value (0.5–0.95):\n• Higher = stricter (fewer false positives)\n• Lower = looser (fewer misses)\n• Recommended: 0.6–0.8\n\nSend <code>/cancel</code> to cancel.',
+    btn_back_ai: '◀️ Back to AI Menu',
+    toast_ai_confidence_ask: 'Please enter a new threshold',
+    ai_confidence_cancelled: '❌ AI threshold change cancelled',
+    ai_confidence_invalid: '⚠️ Please enter a valid number (0.5–0.95), e.g. 0.75',
+    ai_confidence_updated: '✅ AI threshold updated to <code>{value}</code>\n\n• Higher = stricter (fewer false positives)\n• Lower = looser (fewer misses)',
+    st_title: '🗑️ <b>Spam Topic Settings</b>',
+    st_status: 'Status: <b>{status}</b>',
+    st_config_title: '<b>Configuration:</b>',
+    st_topic_id: 'Spam Topic ID: {id}',
+    st_not_set: '(not set)',
+    st_auto_create: 'Auto-Create: {icon}',
+    st_notify_admin: 'Admin Notifications: {icon}',
+    st_related_title: '<b>Related Features:</b>',
+    st_related_spam: 'Spam Filter: {icon}',
+    st_related_ai: 'AI Detection: {icon}',
+    st_howto: '<b>How It Works:</b>\n• The spam topic isolates spam messages\n• Messages can be forwarded silently (the guest is not notified)\n• Admins can review and restore messages at any time',
+    st_steps: '<b>Setup:</b>\n1. Configure a forum group ID\n2. Tap "Auto-Create Topic" or set a topic ID manually\n3. Turn on the spam topic feature\n4. Use it together with the spam filter and AI detection',
+    btn_st_on: '🟢 Turn On Spam Topic', btn_st_off: '🔴 Turn Off Spam Topic',
+    btn_st_create: '➕ Auto-Create Topic', btn_st_config_id: '⚙️ Set Topic ID',
+    btn_st_view: '📊 View Spam Messages', btn_back_spamtopic: '◀️ Back to Spam Topic',
+    toast_st_on: 'Spam topic turned on', toast_st_off: 'Spam topic turned off',
+    toast_no_group: '❌ No group ID configured',
+    st_exists_title: '⚠️ <b>A Spam Topic Already Exists</b>',
+    st_exists_body: 'Current Topic ID: <code>{id}</code>\n\n<b>Options:</b>\n• If the topic was deleted, tap "Force Recreate"\n• To use a new topic, delete the old one or set a new ID manually\n• If the topic is fine, keep using the existing one',
+    btn_force_recreate: '🔄 Force Recreate', btn_cancel: '❌ Cancel',
+    toast_st_exists: 'A spam topic already exists',
+    toast_st_created: '✅ Topic created. ID: {id}',
+    toast_st_recreated: '✅ Topic recreated. ID: {id}',
+    toast_st_create_failed: '❌ Failed to create the topic. Please check that the bot is a group admin.',
+    toast_st_create_failed_detail: '❌ Failed to create the topic. The name may already exist, or the bot lacks permission.',
+    toast_back_spamtopic: 'Back to the spam topic menu',
+    st_config_prompt: '⚙️ <b>Set Spam Topic ID</b>\n\nCurrent Topic ID: <code>{id}</code>\n\n<b>How to Set It:</b>\n1. Create a topic in the group manually\n2. Copy its topic ID (forward a message from the topic to find it)\n3. Send the topic ID here to finish\n\n<b>Or:</b>\n• Send "auto create" or "自动创建" to let the bot create one\n• Send "cancel" or "取消" to give up',
+    toast_st_config_ask: 'Please send a topic ID or "auto create"',
+    st_view_title: '📊 <b>View Spam Messages</b>',
+    st_view_topic_id: '<b>Spam Topic ID:</b> <code>{id}</code>',
+    st_view_link: '<b>Topic Link:</b> ',
+    st_view_open_link: 'Open Topic',
+    st_view_stats_title: '<b>Statistics:</b>',
+    st_view_enabled: 'Spam Topic: {status}',
+    st_view_notify: 'Admin Notifications: {icon}',
+    st_view_desc: '<b>Notes:</b>\n• Messages flagged as spam are forwarded to the spam topic automatically\n• You can review them there and restore false positives\n• To restore a message, reply to it and send /restore',
+    st_view_actions: '<b>Shortcuts:</b>\n• Tap the topic link to jump to the topic in Telegram\n• Go back to view this again',
+    btn_open_topic: '🔗 Open Topic',
+    toast_st_view_shown: 'Spam topic info shown',
+    toast_st_no_topic: '❌ No spam topic configured. Please create one or set a topic ID first.',
+    st_config_cancelled: '❌ Spam topic ID setup cancelled',
+    st_auto_created: '✅ Spam topic created automatically. ID: <code>{id}</code>\n\nPlease turn on the spam topic feature in the menu.',
+    st_auto_create_failed: '❌ Auto-create failed. Please check that the bot is a group admin.',
+    st_invalid_id: '❌ Invalid topic ID. Please enter numbers only, or a topic link.',
+    st_id_set: '✅ Spam topic ID set: <code>{id}</code>\n\nPlease turn on the spam topic feature in the menu.',
+    fwd_title: '💬 <b>Forwarding Mode</b>',
+    fwd_current: 'Current Mode: <b>{mode}</b>',
+    fwd_mode_topic_label: 'Topic Mode (Forum Group)',
+    fwd_mode_direct_label: 'Direct Mode (Admin Chat)',
+    fwd_desc: '<b>How It Works:</b>\n• Direct Mode: all messages go to the admin chat only\n• Topic Mode: a topic is created for each guest, and messages go to the forum group',
+    fwd_prereq_title: '<b>Before enabling Topic Mode, please complete:</b>',
+    fwd_issue_group: '• GROUP_ID environment variable is not set',
+    fwd_issue_admin: '• ENV_ADMIN_UID (primary admin) is not set',
+    fwd_ready: '✅ Topic Mode requirements are met. You can enable it at any time.',
+    fwd_note: 'In Topic Mode, make sure the bot is a group admin with the Manage Topics permission.',
+    btn_fwd_direct: '📥 Direct Messages', btn_fwd_topic: '💬 Forum Topics',
+    toast_fwd_need_config: '⚠️ Please configure GROUP_ID and ENV_ADMIN_UID in the environment variables first',
+    toast_fwd_topic_unavailable: 'Topic mode unavailable: {issue}',
+    toast_fwd_switched_topic: 'Switched to Topic Mode', toast_fwd_switched_direct: 'Switched to Direct Mode',
+    verify_title: '🛡️ <b>Verification Settings</b>',
+    verify_current: 'Current Mode: <b>{mode}</b>',
+    verify_options_title: '<b>Available Modes:</b>',
+    verify_options_block: '📝 <b>Local Quiz</b> - Simple built-in questions (default, no setup needed)\n☁️ <b>Turnstile</b> - Cloudflare Turnstile web verification\n🔒 <b>Quiz + Turnstile</b> - Both checks are required',
+    verify_turnstile_missing: '⚠️ <b>Note:</b> No Turnstile configuration was detected, so only Local Quiz is available.\nSet CF_TURNSTILE_SITE_KEY and CF_TURNSTILE_SECRET_KEY in the environment variables to use other modes.',
+    union_title: '🌐 <b>Federation Ban Settings</b>',
+    union_status: 'Status: {status}',
+    union_desc: 'Federation Ban automatically blocks users flagged as malicious by other services.',
+    union_tap: 'Tap the button below to toggle it.',
+    btn_union_on: '🟢 Turn On Federation Ban', btn_union_off: '🔴 Turn Off Federation Ban',
+    toast_union_on: 'Federation Ban turned on', toast_union_off: 'Federation Ban turned off',
+    welcome_title: '👋 <b>Welcome Message Settings</b>',
+    welcome_current: '📄 <b>Current Content:</b>',
+    welcome_not_set: '(not set; the default message is used)',
+    welcome_howto: '💡 <b>How to Use:</b>\n• Send <code>/welcome Your message</code> to set a new message\n• Send <code>/welcome delete</code> to delete it and use the default\n\nGuests see this message when they first contact the bot.',
+    autoreply_title: '✉️ <b>Auto-Reply Settings</b>',
+    autoreply_current: '📄 <b>Current Content:</b>',
+    autoreply_not_set: '(off)',
+    autoreply_howto: '💡 <b>How to Use:</b>\n• Send <code>/autoreply Your message</code> to set an auto-reply\n• Send <code>/autoreply off</code> to turn it off\n\nVerified guests receive this reply when they send a message.',
+    stats_title: '📊 <b>Statistics</b>',
+    stats_today: '📅 <b>Today ({date})</b>',
+    stats_today_messages: 'Messages: {count}',
+    stats_today_active: 'Active Users: {count}',
+    stats_total_title: '📈 <b>All Time</b>',
+    stats_total_messages: 'Total Messages: {count}',
+    stats_note: '💡 Data is updated hourly.',
+    users_title: '👥 <b>User Management</b>',
+    filter_all: 'All Users', filter_whitelisted: 'Trusted Users', filter_blocked: 'Blocked Users',
+    filter_all_short: 'All', filter_whitelisted_short: 'Trusted', filter_blocked_short: 'Blocked',
+    users_summary: '📊 Total {total} | Trusted {whitelisted} | Blocked {blocked}',
+    users_empty: 'No matching users.',
+    users_page_info: 'Page {page}/{totalPages}',
+    users_hint: '💡 Tap a number button below to manage that user.',
+    users_trusted_tag: 'Trusted', users_blocked_tag: 'Blocked',
+    btn_prev_page: '◀️ Prev', btn_next_page: 'Next ▶️',
+    user_uid_line: '🆔 UID: <code>{uid}</code>',
+    user_status_line: 'Status: {icon} {status}',
+    user_status_trusted: 'Trusted', user_status_blocked: 'Blocked', user_status_normal: 'Regular User',
+    user_choose_action: 'Choose an action:',
+    btn_trust: '⭐ Trust', btn_untrust: '❌ Remove Trust',
+    btn_block: '🚫 Block', btn_unblock: '✅ Unblock',
+    btn_back_users: '◀️ Back to User List',
+    toast_page: 'Page {page}',
+    toast_filter_switched: 'Switched: {filter}',
+    toast_refreshed: 'Refreshed',
+    toast_user_trusted: 'Trusted user {userId}', toast_user_untrusted: 'Removed trust for user {userId}',
+    toast_user_blocked: 'Blocked user {userId}', toast_user_unblocked: 'Unblocked user {userId}',
+    help_title: '🛡️ <b>SafeRelay Admin Panel</b>',
+    help_common_title: '<b>Common Commands:</b>',
+    help_user_mgmt_title: '<b>User Management (reply to a message, or add an ID):</b>',
+    help_msg_settings_title: '<b>Message Settings:</b>',
+    help_forward_system_title: '<b>Forwarding / System:</b>',
+    help_forward_switch_note: 'Switch between Direct / Topic Mode in /menu → Forwarding',
+    help_shortcut_note: '<b>Shortcut:</b> Reply to a guest message to forward your reply',
+    help_footer: '<i>Verification: {verifyMode} | Filter: {filterStatus}</i>',
+    help_body: '<b>Common Commands:</b>\n/menu - Open the graphical menu\n/help - Show help\n/language - Switch language\n/broadcast - Broadcast a message\n/bcancel - Cancel a broadcast\n\n<b>User Management (reply to a message, or add an ID):</b>\n/ban - Block a user\n/unban - Unblock a user\n/reset - Reset verification\n/trust - Trust a user (skip checks)\n/untrust - Remove trust\n\n<b>Message Settings:</b>\n/welcome - Welcome message\n/autoreply - Auto-reply\n\n<b>Forwarding / System:</b>\n/cleanup - Clean up invalid topics\n/cachestats - View cache statistics\n/clearcache - Clear all caches\nSwitch between Direct / Topic Mode in /menu → Forwarding\n\n<b>Shortcut:</b> Reply to a guest message to forward your reply',
+    welcome_deleted: '✅ Welcome message deleted (back to default).',
+    welcome_set: '✅ Welcome message set.',
+    autoreply_off_done: '✅ Auto-reply turned off.',
+    autoreply_set: '✅ Auto-reply set.',
+    kw_allow_added: '✅ Allowed keyword added: <code>{keyword}</code>',
+    kw_already_exists: '⚠️ This allowed keyword already exists.',
+    kw_regex_added: '✅ Pattern added: <code>{regex}</code>',
+    kw_regex_invalid: '❌ Invalid regular expression.',
+    kw_block_deleted: '✅ Blocked keyword deleted: <code>{keyword}</code>',
+    kw_block_not_found: '⚠️ Blocked keyword not found.',
+    kw_allow_deleted: '✅ Allowed keyword deleted: <code>{keyword}</code>',
+    kw_allow_not_found: '⚠️ Allowed keyword not found.',
+    kw_rules_reset_done: '✅ Reset to default rules.',
+    max_links_set: '✅ Link limit set to: {count}',
+    invalid_number: '⚠️ Please enter a valid number.',
+    kw_added: '✅ Blocked keyword added: <code>{keyword}</code>\nSend del:{keyword} to delete it',
+    kw_manage_general_only: 'ℹ️ Keyword management is only available in the General topic or in a private chat.\n\nYou are in a guest topic, so your message will be forwarded to that guest.',
+    ban_success: '🚫 User <code>{id}</code> has been blocked.',
+    ban_usage: '⚠️ Invalid format.\nReply to a user message and send /ban\nor send /ban 123456 (numeric ID only)',
+    unban_success: '✅ User <code>{id}</code> has been unblocked.',
+    unban_usage: '⚠️ Invalid format.\nReply to a user message and send /unban\nor send /unban 123456 (numeric ID only)',
+    reset_whitelist_warning: '⚠️ User <code>{id}</code> is on the trusted list and can message without verification.\n\nTo restrict this user, remove them from the trusted list first.',
+    reset_success: '🔄 Verification reset for user <code>{id}</code>.',
+    reset_usage: '⚠️ Invalid format.\nReply to a user message and send /reset\nor send /reset 123456 (numeric ID only)',
+    broadcast_usage: '⚠️ Invalid format.\nUsage: /broadcast Your message\n\nHTML is supported:\n<b>Bold</b> <i>Italic</i> <code>Code</code>',
+    broadcast_cooldown: '⏳ Broadcast is on cooldown. Please try again in {hours} hour(s).',
+    broadcast_cooldown_limit: '⏳ Broadcast is on cooldown. Please try again in {hours} hour(s).\n\nLimit: {limit} per 24 hours',
+    broadcast_title_done: 'Broadcast Complete', broadcast_title_partial: 'Broadcast Partially Complete (Timed Out)',
+    broadcast_sent_line: '✅ Sent: {sent}/{total}',
+    broadcast_failed_line: '❌ Failed: {failed}',
+    broadcast_skipped_line: '⏭️ Skipped (blocked): {skipped}',
+    btn_bc_continue: '▶️ Continue Sending', btn_bc_cancel: '❌ Cancel Broadcast',
+    toast_bc_sending: 'Sending...', toast_bc_expired: 'Broadcast expired',
+    broadcast_expired_text: '❌ The broadcast message has expired or was cancelled',
+    broadcast_cancelled_text: '✅ Broadcast cancelled',
+    toast_cancelled: 'Cancelled',
+    trust_success: '✅ User <code>{id}</code> is now trusted.',
+    trust_hint: '📋 Reply to a user message, or send /trust 123456 to trust a user',
+    untrust_success: '✅ Trust removed for user <code>{id}</code>.',
+    untrust_hint: '📋 Reply to a user message, or send /untrust 123456 to remove trust',
+    bcancel_done: '✅ Broadcast cancelled',
+    cache_stats_text: '📊 <b>Cache Statistics</b>\n\n<b>L1 In-Memory Cache:</b>\n  Hits: {l1Hits}\n  Misses: {l1Misses}\n  Hit Rate: {l1Rate}\n  Entries: {l1Size}\n\n<b>L2 KV Cache:</b>\n  Hits: {l2Hits}\n  Misses: {l2Misses}\n  Hit Rate: {l2Rate}\n\n<i>Tip: a higher hit rate means better performance.</i>',
+    clearcache_done: '✅ All caches cleared\n\nThe L1 in-memory cache and statistics were reset.\nThe L2 KV cache will expire automatically.',
+    restore_not_enabled: '⚠️ The spam topic feature is not enabled, so messages cannot be restored.',
+    restore_wrong_topic: '⚠️ Please reply to a message in the spam topic to restore it.\n\nNote: only messages in the spam topic can be restored.',
+    restore_success_topic: '✅ Message restored to the guest topic\n\nUID: <code>{uid}</code>\nTopic ID: <code>{topicId}</code>',
+    restore_success_dm: '✅ Message restored and sent to the guest\n\nUID: <code>{uid}</code>',
+    restore_no_mapping: '⚠️ No message mapping found, so it cannot be restored.\n\nPossible reasons: the mapping expired (over 48 hours), or the message was not forwarded via the spam topic feature.',
+    restore_failed: '❌ Failed to restore the message. Please try again later.',
+    invalid_command_topic: '⚠️ Invalid command "{cmd}"\n\nSend /help to see all available commands.',
+    invalid_command: '⚠️ Invalid command "{cmd}"\n\nPlease check the spelling, or send /help to see all available commands.',
+    no_mapping_old: '⚠️ No original guest mapping found. The message may be too old, or the cache was cleared.',
+    help_hint: '🤖 Send /help to see all available commands, or reply to a guest message to forward your reply.',
+    spam_rules_updated: '✅ Spam filter rules updated',
+    cleanup_no_group: '⚠️ GROUP_ID is not configured\n\nTopic cleanup is only needed when using a forum group.\nPlease set GROUP_ID in the Cloudflare environment variables.',
+    cleanup_scan_dry: '🔍 <b>Scanning for Invalid Topics (Preview Mode)</b>',
+    cleanup_scan: '🧹 <b>Cleaning Up Invalid Topics</b>',
+    cleanup_scanning: 'Scanning user data...',
+    cleanup_progress: 'Progress: {done}/{total}\nInvalid found: {invalid}',
+    cleanup_progress_cleaned: 'Cleaned: {cleaned}',
+    cleanup_done_title: '✅ <b>Cleanup Complete</b>',
+    cleanup_stats_title: '📊 <b>Statistics:</b>',
+    cleanup_total_users: 'Total Users: {count}',
+    cleanup_invalid_topics: 'Invalid Topics: {count}',
+    cleanup_cleaned: 'Cleaned: {count}',
+    cleanup_preview_note: 'Preview Mode: nothing was deleted',
+    cleanup_errors: 'Errors: {count}',
+    cleanup_invalid_list_title: '<b>Invalid Users:</b>',
+    cleanup_more: '... and {count} more',
+    cleanup_failed: '❌ <b>Cleanup Failed</b>\n\nError: {error}\n\nPlease check the logs or try again.'
+  },
+  zh: {
+    on: '已开启', off: '已关闭', set: '已设置', not_set: '未设置',
+    guest_welcome_whitelisted: '👋 欢迎使用 SafeRelay！\n\n您已在信任名单中，可以直接发送消息给管理员。',
+    guest_welcome_verified: '👋 欢迎使用 SafeRelay！\n\n您已通过验证，可以直接发送消息给管理员。',
+    guest_blocked: '🚫 您已被管理员拉黑，无法发送消息。',
+    guest_union_banned: '🚫 <b>您已被联合封禁。</b>\n\n您的账号因违反服务条款被全局封禁。如有疑问，请联系管理员。',
+    guest_fraud_blocked: '🚫 <b>服务不可用</b>\n\n您的账号存在异常，无法使用本服务。',
+    admin_fraud_detected: '🚨 <b>检测到欺诈用户</b>\n\nUID: <code>{uid}</code>\n该用户出现在欺诈数据库中，已自动拦截。',
+    guest_spam_blocked: '🚫 您的消息因违反规则被拦截。如有疑问，请联系管理员。',
+    guest_spam_fake_sent: '✅ 消息已发送',
+    admin_spam_intercepted: '🧹 <b>垃圾消息拦截</b>\n\nUID: <code>{uid}</code>\n原因：{reason}\n\n<i>消息已拦截，未转发给管理员。</i>',
+    guest_rate_limited: '⚠️ 发送过于频繁，请等待 {seconds} 秒后再试。',
+    spam_reason_links: '链接过多 ({count}/{max})',
+    spam_reason_keyword: '命中关键词：{keyword}',
+    spam_reason_regex: '命中正则规则',
+    spam_reason_ai: 'AI 识别为垃圾消息',
+    verification_expired_notice: '⚠️ <b>验证失效通知</b>\n\n您的话题可能已被删除或失效，需要重新验证。\n\n请点击 /start 重新开始验证流程。',
+    kv_quota_notice: '⚠️ <b>KV 配额超限</b>\n\nCloudflare KV 操作被限制（429），已自动暂停 KV 操作。\n请稍后重试，或检查 Cloudflare 后台的 KV 用量。',
+    topic_recover_notice: '⚠️ 访客 {userId} 的话题已失效，正在尝试重新创建。',
+    error_report: '🚨 <b>SafeRelay 错误报告</b>\n\n<b>上下文：</b> {context}\n<b>错误：</b> {error}\n<b>时间：</b> {time}',
+    topic_env_notice: '[通知] 话题模式不可用：{issue}',
+    topic_issue_group_missing: '未配置 GROUP_ID。',
+    topic_issue_chat_inaccessible: '机器人无法访问已配置的群组（{description}）。',
+    topic_issue_not_forum: '目标群组尚未开启话题功能。',
+    topic_issue_not_admin: '机器人不是群组管理员。',
+    topic_issue_missing_manage_topics: '机器人缺少「管理话题」权限。',
+    topic_issue_membership: '无法读取机器人权限：{description}。',
+    topic_issue_default: '检查论坛群组时出现意外错误。',
+    err_generic: '操作失败',
+    err_message_not_found: '消息不存在或已过期',
+    err_empty_message: '消息内容不能为空',
+    err_message_too_long: '消息内容过长',
+    err_chat_not_found: '聊天不存在',
+    err_bot_blocked: '您已屏蔽机器人，请解除屏蔽后重试',
+    err_user_deactivated: '用户账号已注销',
+    err_permission_denied: '权限不足',
+    err_rate_limited: '操作过于频繁，请稍后再试',
+    err_network_error: '网络错误，请稍后重试',
+    err_auth_error: '认证失败，请检查配置',
+    err_timeout: '请求超时，请稍后重试',
+    mode_local_quiz: '📝 本地题库',
+    mode_turnstile: '☁️ Turnstile',
+    mode_both: '🔒 双重验证',
+    quiz_expired: '验证已过期，请重新获取题目',
+    quiz_max_attempts: '尝试次数过多，请重新获取题目',
+    quiz_wrong: '答案错误，还剩 {remaining} 次机会',
+    quiz_lock_wait: '⏳ 验证进行中，请等待 {seconds} 秒后再试',
+    quiz_invalid_data: '❌ 无效的数据格式',
+    quiz_invalid_option: '❌ 无效的选项',
+    quiz_attempt_rate: '⏳ 尝试过于频繁，请等待 {seconds} 秒后再试',
+    quiz_success_toast: '验证成功！',
+    quiz_success_msg: '✅ 验证成功！您现在可以发送消息给管理员了。',
+    quiz_success_pending: '✅ 验证成功！\n\n📩 刚才的 {count} 条消息已送达管理员。',
+    quiz_error: '❌ 验证处理出错，请重试',
+    verify_mode_switch_failed: '❌ 无法切换到该模式，请确保已配置 Turnstile 密钥',
+    verify_mode_switched: '已切换到：{mode}',
+    verify_pending_queued: '📝 消息已暂存，完成验证后会自动发送（最多暂存 {max} 条）',
+    verify_too_frequent: '⏳ 验证尝试过于频繁，请 5 分钟后再试。',
+    verify_session_failed: '⚠️ 系统暂时无法创建验证会话，请稍后再试。',
+    verify_quiz_with_welcome: '🛡️ 请回答以下问题以继续对话：',
+    verify_quiz_default: '🛡️ 为了防止垃圾消息，请回答以下问题：',
+    verify_both_with_welcome: '🛡️ 请完成以下两步验证以继续对话：',
+    verify_both_default: '🛡️ 为了防止垃圾消息，请完成以下两步验证：',
+    verify_turnstile_with_welcome: '🛡️ 请完成下方验证以继续对话：',
+    verify_turnstile_default: '🛡️ 为了防止垃圾消息，请点击下方按钮完成人机验证：',
+    btn_verify_turnstile: '🛡️ 开始人机验证',
+    turnstile_success: '✅ 验证通过！\n\n如果重复验证请等待一分钟后再发送消息，以确保验证状态同步。',
+    turnstile_success_pending: '✅ 验证通过！\n\n📩 刚才的 {count} 条消息已送达管理员。',
+    verify_admin_notify: '✅ <b>新用户验证通过</b>',
+    btn_open_profile: '👤 打开用户资料',
+    verify_not_configured: 'Turnstile 未配置',
+    verify_page_title: '人机验证 - SafeRelay',
+    verify_page_heading: '安全验证',
+    verify_page_subtitle: '请完成下方验证以继续对话',
+    verify_page_success: '验证成功！',
+    verify_page_success_desc: '请返回 Telegram 继续聊天',
+    verify_page_error: '验证失败',
+    verify_page_error_desc: '请重试或刷新页面',
+    verify_page_retry: '重新验证',
+    verify_page_footer: '该界面由 SafeRelay 提供',
+    verify_page_loading: '验证中...',
+    spam_topic_name: '🗑️ 垃圾消息回收站',
+    spam_silently_handled: '🗑️ <b>垃圾消息已静默处理</b>\n\nUID: <code>{uid}</code>\n话题 ID: <code>{topicId}</code>\n\n<i>消息已转发到垃圾话题，访客无感知。</i>',
+    topic_welcome_title: '👤 <b>新访客对话</b>',
+    topic_welcome_uid: 'UID：<code>{uid}</code>',
+    topic_welcome_username: '用户名：@{username}',
+    topic_welcome_nickname: '昵称：{name}',
+    topic_welcome_hint: '请在此话题内回复访客消息。',
+    guest_default_name: '访客',
+    rules_link_limit: '<b>链接限制：</b> 最多 {max} 个',
+    rules_block_keywords: '<b>拦截关键词（{count} 个）：</b>',
+    rules_block_regex: '<b>拦截正则（{count} 个）：</b>',
+    rules_allow_keywords: '<b>放行关键词：</b> {keywords}',
+    rules_more: '... 等共 {count} 个',
+    keyword_empty: '<i>(空)</i>',
+    keyword_more: '... 还有 {count} 个',
+    forward_failed: '❌ 转发消息失败：{error}',
+    forward_failed_topic_hint: '请检查机器人是否为群组管理员，并确认群组已启用话题。',
+    forward_all_admins_blocked: '⚠️ 消息发送失败：所有管理员均已屏蔽机器人，无法接收消息。',
+    edit_expired: '⚠️ 无法编辑消息：消息已过期或被删除（超过 48 小时）。\n\n如需修改，请直接发送新消息。',
+    edit_failed: '⚠️ 编辑消息失败：{error}\n\n如需修改，请直接发送新消息。',
+    edit_process_failed: '❌ 处理编辑消息失败：{error}',
+    edit_no_mapping: '⚠️ 未找到消息映射关系，无法同步编辑到访客。\n\n可能原因：消息已过期（超过 48 小时）或机器人已重启。',
+    edit_no_text: '(无文本内容)',
+    language_title: '🌍 <b>Language / 语言</b>',
+    language_prompt: '🌍 <b>语言设置</b>\n\n当前语言：<b>{current}</b>\n\n请选择语言：',
+    language_current_en: 'English',
+    language_current_zh: '简体中文',
+    language_changed: '✅ 已切换为简体中文。',
+    btn_language: '🌍 语言',
+    btn_english: 'English',
+    btn_chinese: '简体中文',
+    menu_title: '🛡️ <b>SafeRelay 管理面板</b>',
+    menu_current_config: '📊 <b>当前配置：</b>',
+    menu_verify_mode: '验证模式：{mode}',
+    menu_spam_filter: '垃圾过滤：{status}',
+    menu_ai_detection: 'AI 检测：{status}',
+    menu_union_ban: '联合封禁：{status}',
+    menu_welcome_msg: '欢迎消息：{status}',
+    menu_auto_reply: '自动回复：{status}',
+    menu_forward_mode: '转发模式：{mode}',
+    menu_forward_topic: '💬 话题',
+    menu_forward_direct: '📥 私聊',
+    menu_tap_below: '点击下方按钮进入设置。',
+    btn_verify_mode: '🛡️ 验证模式',
+    btn_spam_filter: '🧹 垃圾过滤',
+    btn_ai_detection: '🤖 AI 检测',
+    btn_spam_topic: '🗑️ 垃圾话题',
+    btn_union_ban: '🌐 联合封禁',
+    btn_users: '👥 用户管理',
+    btn_welcome: '👋 欢迎消息',
+    btn_autoreply: '✉️ 自动回复',
+    btn_forward_mode: '💬 转发模式',
+    btn_stats: '📊 统计信息',
+    btn_back_main: '◀️ 返回主菜单',
+    btn_refresh: '🔄 刷新',
+    spam_title: '🧹 <b>垃圾消息过滤设置</b>',
+    spam_status: '当前状态：<b>{status}</b>',
+    spam_current_rules: '<b>当前规则：</b>',
+    spam_quick_actions: '<b>快捷操作：</b>\n• 直接发送关键词添加拦截规则\n• 发送 <code>清空默认</code> 或 <code>clear defaults</code> 清空所有默认规则\n• 发送 <code>max_links:N</code> 设置链接限制\n• 发送 <code>allow:关键词</code> 添加放行规则',
+    spam_multiline_note: '💡 支持同时发送多行，每行一个规则。',
+    status_on_icon: '🟢 已开启', status_off_icon: '🔴 已关闭',
+    btn_spam_on: '🟢 开启过滤', btn_spam_off: '🔴 关闭过滤',
+    btn_manage_keywords: '🔑 关键词管理',
+    btn_reset_rules: '🔄 重置为默认规则',
+    btn_back_spam: '◀️ 返回过滤设置',
+    toast_keywords_cleared: '✅ 已清空所有拦截关键词和正则',
+    toast_spam_on: '垃圾过滤已开启', toast_spam_off: '垃圾过滤已关闭',
+    toast_rules_reset: '已重置为默认规则',
+    kw_title: '🔑 <b>关键词规则管理</b>',
+    kw_block_keywords: '<b>拦截关键词（{count} 个）：</b>',
+    kw_allow_keywords: '<b>放行关键词（{count} 个）：</b>',
+    kw_block_regex: '<b>拦截正则（{count} 个）：</b>',
+    kw_allow_regex: '<b>放行正则（{count} 个）：</b>',
+    kw_howto: '<b>管理方法：</b>\n• 添加拦截词：直接发送关键词\n• 添加放行词：<code>allow:关键词</code>\n• 添加正则：<code>regex:正则表达式</code>\n• 删除拦截词：<code>del:关键词</code>\n• 删除放行词：<code>delallow:关键词</code>\n• 清空所有：<code>清空默认</code> 或 <code>clear defaults</code>',
+    kw_note: '💡 关键词和正则会立即生效。',
+    btn_view_all_keywords: '📋 查看完整列表',
+    btn_clear_keywords: '🗑️ 清空拦截词',
+    kw_list_title: '<b>完整规则列表：</b>',
+    kw_section_block: '=== 拦截关键词 ===',
+    kw_section_allow: '=== 放行关键词 ===',
+    kw_section_block_re: '=== 拦截正则 ===',
+    kw_section_allow_re: '=== 放行正则 ===',
+    ai_title: '🤖 <b>AI 垃圾检测设置</b>',
+    ai_status: '当前状态：<b>{status}</b>',
+    ai_config_title: '<b>配置信息：</b>',
+    ai_threshold: '置信度阈值：{value}',
+    ai_hourly_limit: '每小时限额：{limit} 次',
+    ai_remaining: '剩余次数：{remaining} 次',
+    ai_reset_in: '重置时间：{seconds} 秒后',
+    ai_howto: '<b>使用说明：</b>\n• AI 检测作为关键词过滤的补充\n• 自动识别广告、推广、投资等垃圾内容\n• 需要配置 Cloudflare Workers AI',
+    ai_env_title: '<b>环境变量：</b>',
+    ai_tip: '💡 建议：先使用关键词过滤，AI 作为兜底策略。',
+    btn_ai_on: '🟢 开启 AI 检测', btn_ai_off: '🔴 关闭 AI 检测',
+    btn_ai_confidence: '⚙️ 调整置信度', btn_ai_stats: '📊 查看使用统计',
+    toast_ai_on: 'AI 检测已开启', toast_ai_off: 'AI 检测已关闭',
+    ai_stats_alert: '📊 AI 使用统计\n本小时已用：{used}/{limit}\n剩余：{remaining}\n重置：{reset} 秒后',
+    ai_confidence_prompt: '⚙️ <b>调整 AI 置信度</b>\n\n当前阈值：<code>{value}</code>\n\n请发送一个新数值（0.5 ~ 0.95）：\n• 越高越严格（减少误判）\n• 越低越宽松（减少漏判）\n• 建议范围：0.6 ~ 0.8\n\n发送 <code>/cancel</code> 取消',
+    btn_back_ai: '◀️ 返回 AI 菜单',
+    toast_ai_confidence_ask: '请输入新的置信度阈值',
+    ai_confidence_cancelled: '❌ 已取消调整置信度',
+    ai_confidence_invalid: '⚠️ 请输入有效的数值（0.5 ~ 0.95），例如：0.75',
+    ai_confidence_updated: '✅ AI 置信度已更新为 <code>{value}</code>\n\n• 越高越严格（减少误判）\n• 越低越宽松（减少漏判）',
+    st_title: '🗑️ <b>垃圾话题管理设置</b>',
+    st_status: '当前状态：<b>{status}</b>',
+    st_config_title: '<b>配置信息：</b>',
+    st_topic_id: '垃圾话题 ID：{id}',
+    st_not_set: '(未设置)',
+    st_auto_create: '自动创建：{icon}',
+    st_notify_admin: '管理员通知：{icon}',
+    st_related_title: '<b>关联功能：</b>',
+    st_related_spam: '垃圾过滤：{icon}',
+    st_related_ai: 'AI 检测：{icon}',
+    st_howto: '<b>使用说明：</b>\n• 垃圾话题用于隔离垃圾消息\n• 可选择静默转发（访客无感知）\n• 管理员可随时查看和恢复消息',
+    st_steps: '<b>操作步骤：</b>\n1. 配置群组 ID（论坛群组）\n2. 点击「自动创建话题」或手动指定\n3. 开启垃圾话题功能\n4. 配合垃圾过滤和 AI 检测使用',
+    btn_st_on: '🟢 开启垃圾话题', btn_st_off: '🔴 关闭垃圾话题',
+    btn_st_create: '➕ 自动创建话题', btn_st_config_id: '⚙️ 配置话题 ID',
+    btn_st_view: '📊 查看垃圾消息', btn_back_spamtopic: '◀️ 返回垃圾话题菜单',
+    toast_st_on: '垃圾话题已开启', toast_st_off: '垃圾话题已关闭',
+    toast_no_group: '❌ 未配置群组 ID',
+    st_exists_title: '⚠️ <b>垃圾话题已存在</b>',
+    st_exists_body: '当前话题 ID：<code>{id}</code>\n\n<b>选项：</b>\n• 如果话题已被删除，请点击「强制重新创建」\n• 如果想使用新话题，请先删除旧话题或手动指定新 ID\n• 如果话题正常，请直接使用现有话题',
+    btn_force_recreate: '🔄 强制重新创建', btn_cancel: '❌ 取消',
+    toast_st_exists: '垃圾话题已存在',
+    toast_st_created: '✅ 话题已创建，ID：{id}',
+    toast_st_recreated: '✅ 话题已重新创建，ID：{id}',
+    toast_st_create_failed: '❌ 创建话题失败，请检查机器人是否为群组管理员',
+    toast_st_create_failed_detail: '❌ 创建话题失败，可能话题名称重复或机器人权限不足',
+    toast_back_spamtopic: '已返回垃圾话题菜单',
+    st_config_prompt: '⚙️ <b>配置垃圾话题 ID</b>\n\n当前话题 ID：<code>{id}</code>\n\n<b>使用方法：</b>\n1. 在群组中手动创建一个话题\n2. 复制话题 ID（可以通过转发话题中的消息获取）\n3. 发送话题 ID 完成配置\n\n<b>或者：</b>\n• 发送「自动创建」或 "auto create" 让机器人自动创建话题\n• 发送「取消」或 "cancel" 放弃配置',
+    toast_st_config_ask: '请发送话题 ID 或「自动创建」',
+    st_view_title: '📊 <b>查看垃圾消息</b>',
+    st_view_topic_id: '<b>垃圾话题 ID：</b> <code>{id}</code>',
+    st_view_link: '<b>话题链接：</b> ',
+    st_view_open_link: '点击跳转',
+    st_view_stats_title: '<b>统计信息：</b>',
+    st_view_enabled: '垃圾话题功能：{status}',
+    st_view_notify: '管理员通知：{icon}',
+    st_view_desc: '<b>说明：</b>\n• 所有被标记为垃圾的消息会自动转发到垃圾话题\n• 您可以在话题中查看和恢复误判的消息\n• 恢复消息请回复该消息并发送 /restore',
+    st_view_actions: '<b>快捷操作：</b>\n• 点击话题链接直接跳转到 Telegram 话题\n• 返回菜单可重新查看',
+    btn_open_topic: '🔗 打开话题',
+    toast_st_view_shown: '已显示垃圾话题信息',
+    toast_st_no_topic: '❌ 未配置垃圾话题，请先创建或配置话题 ID',
+    st_config_cancelled: '❌ 已取消配置垃圾话题 ID',
+    st_auto_created: '✅ 垃圾话题已自动创建，ID：<code>{id}</code>\n\n请在菜单中开启垃圾话题功能',
+    st_auto_create_failed: '❌ 自动创建失败，请检查机器人是否为群组管理员',
+    st_invalid_id: '❌ 无效的话题 ID，请输入纯数字或话题链接',
+    st_id_set: '✅ 垃圾话题 ID 已设置：<code>{id}</code>\n\n请在菜单中开启垃圾话题功能',
+    fwd_title: '💬 <b>消息转发模式</b>',
+    fwd_current: '当前模式：<b>{mode}</b>',
+    fwd_mode_topic_label: '话题模式（论坛群组）',
+    fwd_mode_direct_label: '私聊模式（管理员私聊）',
+    fwd_desc: '<b>说明：</b>\n• 私聊模式：所有消息只发到管理员私聊\n• 话题模式：每个访客自动创建话题，消息转发到论坛群组',
+    fwd_prereq_title: '<b>启用话题模式前请完成：</b>',
+    fwd_issue_group: '• 未设置 GROUP_ID 环境变量',
+    fwd_issue_admin: '• 未设置 ENV_ADMIN_UID（主管理员）',
+    fwd_ready: '✅ 话题模式条件已满足，可随时开启。',
+    fwd_note: '在话题模式下，请确保机器人是群组管理员并具备「管理话题」权限。',
+    btn_fwd_direct: '📥 私聊转发', btn_fwd_topic: '💬 话题转发',
+    toast_fwd_need_config: '⚠️ 请先在环境变量中配置 GROUP_ID 和 ENV_ADMIN_UID',
+    toast_fwd_topic_unavailable: '话题模式不可用：{issue}',
+    toast_fwd_switched_topic: '已切换到话题模式', toast_fwd_switched_direct: '已切换到私聊模式',
+    verify_title: '🛡️ <b>验证模式设置</b>',
+    verify_current: '当前模式：<b>{mode}</b>',
+    verify_options_title: '<b>可选模式：</b>',
+    verify_options_block: '📝 <b>本地题库</b> - 使用内置简单题目验证（默认，无需配置）\n☁️ <b>Turnstile</b> - 使用 Cloudflare Turnstile 网页验证\n🔒 <b>双重验证</b> - 需要同时通过两种验证',
+    verify_turnstile_missing: '⚠️ <b>注意：</b> 未检测到 Turnstile 配置，只能使用本地题库验证。\n请在环境变量中配置 CF_TURNSTILE_SITE_KEY 和 CF_TURNSTILE_SECRET_KEY 后使用其他模式。',
+    union_title: '🌐 <b>联合封禁设置</b>',
+    union_status: '当前状态：{status}',
+    union_desc: '联合封禁可以自动拦截已被其他服务标记为恶意的用户。',
+    union_tap: '点击下方按钮切换状态。',
+    btn_union_on: '🟢 开启联合封禁', btn_union_off: '🔴 关闭联合封禁',
+    toast_union_on: '联合封禁已开启', toast_union_off: '联合封禁已关闭',
+    welcome_title: '👋 <b>欢迎消息设置</b>',
+    welcome_current: '📄 <b>当前内容：</b>',
+    welcome_not_set: '(未设置，使用默认消息)',
+    welcome_howto: '💡 <b>使用方法：</b>\n• 发送 <code>/welcome 消息内容</code> 设置新消息\n• 发送 <code>/welcome delete</code> 删除并使用默认\n\n访客首次联系机器人时会看到此消息。',
+    autoreply_title: '✉️ <b>自动回复设置</b>',
+    autoreply_current: '📄 <b>当前内容：</b>',
+    autoreply_not_set: '(已关闭)',
+    autoreply_howto: '💡 <b>使用方法：</b>\n• 发送 <code>/autoreply 消息内容</code> 设置自动回复\n• 发送 <code>/autoreply off</code> 关闭自动回复\n\n已验证访客发送消息时会收到此回复。',
+    stats_title: '📊 <b>统计信息</b>',
+    stats_today: '📅 <b>今日数据（{date}）</b>',
+    stats_today_messages: '消息数：{count}',
+    stats_today_active: '活跃用户：{count}',
+    stats_total_title: '📈 <b>累计数据</b>',
+    stats_total_messages: '总消息数：{count}',
+    stats_note: '💡 数据每小时自动更新。',
+    users_title: '👥 <b>用户管理</b>',
+    filter_all: '全部用户', filter_whitelisted: '信任用户', filter_blocked: '拉黑用户',
+    filter_all_short: '全部', filter_whitelisted_short: '信任', filter_blocked_short: '拉黑',
+    users_summary: '📊 全部 {total} | 信任 {whitelisted} | 拉黑 {blocked}',
+    users_empty: '暂无匹配用户。',
+    users_page_info: '第 {page}/{totalPages} 页',
+    users_hint: '💡 点击下方序号按钮即可管理对应用户。',
+    users_trusted_tag: '信任', users_blocked_tag: '拉黑',
+    btn_prev_page: '◀️ 上页', btn_next_page: '下页 ▶️',
+    user_uid_line: '🆔 UID：<code>{uid}</code>',
+    user_status_line: '状态：{icon} {status}',
+    user_status_trusted: '已信任', user_status_blocked: '已拉黑', user_status_normal: '普通用户',
+    user_choose_action: '请选择操作：',
+    btn_trust: '⭐ 信任', btn_untrust: '❌ 取消信任',
+    btn_block: '🚫 拉黑', btn_unblock: '✅ 解封',
+    btn_back_users: '← 返回用户列表',
+    toast_page: '第 {page} 页',
+    toast_filter_switched: '已切换：{filter}',
+    toast_refreshed: '已刷新',
+    toast_user_trusted: '已信任用户 {userId}', toast_user_untrusted: '已取消信任用户 {userId}',
+    toast_user_blocked: '已拉黑用户 {userId}', toast_user_unblocked: '已解封用户 {userId}',
+    help_title: '🛡️ <b>SafeRelay 管理面板</b>',
+    help_common_title: '<b>常用指令：</b>',
+    help_user_mgmt_title: '<b>用户管理（回复消息或指定 ID）：</b>',
+    help_msg_settings_title: '<b>消息设置：</b>',
+    help_forward_system_title: '<b>转发 / 系统：</b>',
+    help_forward_switch_note: '在 /menu → 转发模式中切换私聊 / 话题',
+    help_shortcut_note: '<b>快捷操作：</b> 回复访客消息即可转发',
+    help_footer: '<i>验证：{verifyMode} | 过滤：{filterStatus}</i>',
+    help_body: '<b>常用指令：</b>\n/menu - 打开图形菜单\n/help - 显示帮助\n/language - 切换语言\n/broadcast - 广播消息\n/bcancel - 取消广播\n\n<b>用户管理（回复消息或指定 ID）：</b>\n/ban - 封禁用户\n/unban - 解封用户\n/reset - 重置验证\n/trust - 信任用户（跳过检查）\n/untrust - 取消信任\n\n<b>消息设置：</b>\n/welcome - 欢迎消息\n/autoreply - 自动回复\n\n<b>转发 / 系统：</b>\n/cleanup - 清理失效话题\n/cachestats - 查看缓存统计\n/clearcache - 清空缓存\n在 /menu → 转发模式中切换私聊 / 话题\n\n<b>快捷操作：</b> 回复访客消息即可转发',
+    welcome_deleted: '✅ 欢迎消息已删除（恢复默认）。',
+    welcome_set: '✅ 欢迎消息已设置。',
+    autoreply_off_done: '✅ 自动回复已关闭。',
+    autoreply_set: '✅ 自动回复已设置。',
+    kw_allow_added: '✅ 已添加放行关键词：<code>{keyword}</code>',
+    kw_already_exists: '⚠️ 该放行关键词已存在。',
+    kw_regex_added: '✅ 已添加正则规则：<code>{regex}</code>',
+    kw_regex_invalid: '❌ 正则表达式无效。',
+    kw_block_deleted: '✅ 已删除拦截关键词：<code>{keyword}</code>',
+    kw_block_not_found: '⚠️ 未找到该拦截关键词。',
+    kw_allow_deleted: '✅ 已删除放行关键词：<code>{keyword}</code>',
+    kw_allow_not_found: '⚠️ 未找到该放行关键词。',
+    kw_rules_reset_done: '✅ 已重置为默认规则。',
+    max_links_set: '✅ 链接限制已设置为：{count}',
+    invalid_number: '⚠️ 请输入有效的数字。',
+    kw_added: '✅ 已添加拦截关键词：<code>{keyword}</code>\n发送 del:{keyword} 删除',
+    kw_manage_general_only: 'ℹ️ 关键词管理只能在 General 话题或私聊中进行。\n\n当前在访客话题中，消息将转发给该访客。',
+    ban_success: '🚫 用户 <code>{id}</code> 已被封禁。',
+    ban_usage: '⚠️ 格式错误。\n请回复访客消息发送 /ban\n或发送 /ban 123456（必须是数字 ID）',
+    unban_success: '✅ 用户 <code>{id}</code> 已解封。',
+    unban_usage: '⚠️ 格式错误。\n请回复访客消息发送 /unban\n或发送 /unban 123456（必须是数字 ID）',
+    reset_whitelist_warning: '⚠️ 用户 <code>{id}</code> 在信任名单中，无需验证即可发送消息。\n\n如需限制该用户，请先取消其信任状态。',
+    reset_success: '🔄 用户 <code>{id}</code> 验证状态已取消。',
+    reset_usage: '⚠️ 格式错误。\n请回复访客消息发送 /reset\n或发送 /reset 123456（必须是数字 ID）',
+    broadcast_usage: '⚠️ 格式错误。\n用法：/broadcast 消息内容\n\n支持 HTML 格式：\n<b>粗体</b> <i>斜体</i> <code>代码</code>',
+    broadcast_cooldown: '⏳ 广播冷却中，请 {hours} 小时后再试。',
+    broadcast_cooldown_limit: '⏳ 广播冷却中，请 {hours} 小时后再试。\n\n限额：{limit} 次 / 24 小时',
+    broadcast_title_done: '广播完成', broadcast_title_partial: '广播部分完成（超时）',
+    broadcast_sent_line: '✅ 已发送：{sent}/{total}',
+    broadcast_failed_line: '❌ 失败：{failed}',
+    broadcast_skipped_line: '⏭️ 跳过（封禁）：{skipped}',
+    btn_bc_continue: '▶️ 继续发送', btn_bc_cancel: '❌ 取消广播',
+    toast_bc_sending: '正在发送...', toast_bc_expired: '广播已过期',
+    broadcast_expired_text: '❌ 广播消息已过期或被取消',
+    broadcast_cancelled_text: '✅ 已取消广播',
+    toast_cancelled: '已取消',
+    trust_success: '✅ 已信任用户 <code>{id}</code>',
+    trust_hint: '📋 请回复访客消息或发送 /trust 123456 来信任用户',
+    untrust_success: '✅ 已取消信任用户 <code>{id}</code>',
+    untrust_hint: '📋 请回复访客消息或发送 /untrust 123456 来取消信任',
+    bcancel_done: '✅ 已取消广播',
+    cache_stats_text: '📊 <b>缓存统计信息</b>\n\n<b>L1 内存缓存：</b>\n  命中：{l1Hits}\n  未命中：{l1Misses}\n  命中率：{l1Rate}\n  缓存大小：{l1Size} 条目\n\n<b>L2 KV 缓存：</b>\n  命中：{l2Hits}\n  未命中：{l2Misses}\n  命中率：{l2Rate}\n\n<i>提示：命中率越高，性能越好</i>',
+    clearcache_done: '✅ 已清空所有缓存\n\nL1 内存缓存和统计信息已重置。\nL2 KV 缓存将在到期后自动清理。',
+    restore_not_enabled: '⚠️ 垃圾话题功能未启用，无法恢复消息。',
+    restore_wrong_topic: '⚠️ 请回复垃圾话题中的消息来恢复。\n\n提示：只有垃圾话题中的消息才能被恢复。',
+    restore_success_topic: '✅ 消息已恢复到访客话题\n\nUID：<code>{uid}</code>\n话题 ID：<code>{topicId}</code>',
+    restore_success_dm: '✅ 消息已恢复并发送给访客\n\nUID：<code>{uid}</code>',
+    restore_no_mapping: '⚠️ 未找到消息映射关系，无法恢复。\n\n可能原因：消息映射已过期（超过 48 小时）或消息不是通过垃圾话题功能转发的。',
+    restore_failed: '❌ 恢复消息失败，请稍后重试。',
+    invalid_command_topic: '⚠️ 无效命令「{cmd}」\n\n请发送 /help 查看所有可用指令。',
+    invalid_command: '⚠️ 无效命令「{cmd}」\n\n请检查命令拼写，或发送 /help 查看所有可用指令。',
+    no_mapping_old: '⚠️ 未找到原访客映射，可能消息太旧或缓存已被清理。',
+    help_hint: '🤖 请发送 /help 查看所有可用指令，或直接回复访客消息进行转发。',
+    spam_rules_updated: '✅ 垃圾过滤规则已更新',
+    cleanup_no_group: '⚠️ 未配置 GROUP_ID 环境变量\n\n话题清理功能仅在使用论坛群组时需要。\n请在 Cloudflare 环境变量中设置 GROUP_ID。',
+    cleanup_scan_dry: '🔍 <b>开始扫描失效话题（预览模式）</b>',
+    cleanup_scan: '🧹 <b>开始清理失效话题</b>',
+    cleanup_scanning: '正在扫描用户数据...',
+    cleanup_progress: '进度：{done}/{total}\n已发现失效：{invalid}',
+    cleanup_progress_cleaned: '已清理：{cleaned}',
+    cleanup_done_title: '✅ <b>清理完成</b>',
+    cleanup_stats_title: '📊 <b>统计信息：</b>',
+    cleanup_total_users: '总用户数：{count}',
+    cleanup_invalid_topics: '失效话题：{count}',
+    cleanup_cleaned: '已清理：{count}',
+    cleanup_preview_note: '预览模式：未执行清理',
+    cleanup_errors: '错误：{count}',
+    cleanup_invalid_list_title: '<b>失效用户列表：</b>',
+    cleanup_more: '... 还有 {count} 个',
+    cleanup_failed: '❌ <b>清理失败</b>\n\n错误信息：{error}\n\n请检查日志或重试。'
+  }
+};
+
+function t(lang, key, vars = {}) {
+  const normalized = normalizeLang(lang) || getDefaultLang();
+  const dict = I18N[normalized] || I18N.en;
+  let str = dict[key] !== undefined ? dict[key] : (I18N.en[key] !== undefined ? I18N.en[key] : key);
+  if (vars && typeof str === 'string') {
+    str = str.replace(/\{(\w+)\}/g, (m, name) => (vars[name] !== undefined && vars[name] !== null ? String(vars[name]) : m));
+  }
+  return str;
+}
+
+function languageKeyboard() {
+  return { inline_keyboard: [[
+    { text: 'English', callback_data: 'lang_set:en' },
+    { text: '简体中文', callback_data: 'lang_set:zh' }
+  ]] };
+}
+
+function guestLanguageKeyboard(lang) {
+  return { inline_keyboard: [[
+    { text: t(lang, 'btn_language'), callback_data: 'submenu_language' }
+  ]] };
+}
+
+async function generateLanguageSubmenu(lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
+  const currentName = t(L, L === 'zh' ? 'language_current_zh' : 'language_current_en');
+  const text = t(L, 'language_prompt', { current: currentName });
+  return { text, reply_markup: languageKeyboard() };
+}
+
+async function sendLanguageMenu(chatId, userId, extra = {}) {
+  const lang = await getUserLang(userId);
+  const menu = await generateLanguageSubmenu(lang);
+  return sendMessage({ chat_id: chatId, text: menu.text, parse_mode: 'HTML', reply_markup: menu.reply_markup, ...extra });
+}
+
+async function handleLanguageCallback(callbackQuery) {
+  const data = callbackQuery.data || '';
+  const userId = String(callbackQuery.from.id);
+  const chatId = callbackQuery.message ? callbackQuery.message.chat.id : userId;
+  const messageId = callbackQuery.message ? callbackQuery.message.message_id : null;
+  if (data === 'submenu_language' || data === 'lang_menu') {
+    const lang = await getUserLang(userId);
+    const menu = await generateLanguageSubmenu(lang);
+    if (isAdmin(userId)) menu.reply_markup.inline_keyboard.push([{ text: t(lang, 'btn_back_main'), callback_data: 'back_to_main' }]);
+    if (messageId && isAdmin(userId)) {
+      await requestTelegram('editMessageText', { chat_id: chatId, message_id: messageId, text: menu.text, parse_mode: 'HTML', reply_markup: menu.reply_markup }).catch(() => null);
+    } else {
+      await sendMessage({ chat_id: chatId, text: menu.text, parse_mode: 'HTML', reply_markup: menu.reply_markup });
+    }
+    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id });
+  }
+  if (data.startsWith('lang_set:')) {
+    const newLang = normalizeLang(data.split(':')[1]) || getDefaultLang();
+    await setUserLang(userId, newLang);
+    const confirmText = t(newLang, 'language_changed');
+    if (isAdmin(userId) && messageId) {
+      const menu = await generateMainMenu(newLang);
+      await requestTelegram('editMessageText', { chat_id: chatId, message_id: messageId, text: menu.text, parse_mode: 'HTML', reply_markup: menu.reply_markup }).catch(() => null);
+      await sendMessage({ chat_id: chatId, text: confirmText });
+    } else if (messageId) {
+      await requestTelegram('editMessageText', { chat_id: chatId, message_id: messageId, text: confirmText }).catch(() => null);
+    } else {
+      await sendMessage({ chat_id: chatId, text: confirmText });
+    }
+    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: confirmText });
+  }
+  return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id });
+}
 
 // 验证通过后的有效期 (秒)，默认 7 天
 const VERIFICATION_TTL = 60 * 60 * 24 * 7;
@@ -282,21 +1138,21 @@ const VERIFY_MODE_DEFAULT = 'local_quiz';
 
 // 本地题库题目
 const LOCAL_QUIZ_QUESTIONS = [
-  { q: "冰融化后会变成什么？", opts: ["水", "石头", "木头", "火"], a: 0 },
-  { q: "正常人有几只眼睛？", opts: ["1", "2", "3", "4"], a: 1 },
-  { q: "以下哪个属于水果？", opts: ["白菜", "香蕉", "猪肉", "大米"], a: 1 },
-  { q: "1 加 2 等于几？", opts: ["2", "3", "4", "5"], a: 1 },
-  { q: "5 减 2 等于几？", opts: ["1", "2", "3", "4"], a: 2 },
-  { q: "2 乘以 3 等于几？", opts: ["4", "5", "6", "7"], a: 2 },
-  { q: "10 加 5 等于几？", opts: ["10", "12", "15", "20"], a: 2 },
-  { q: "8 减 4 等于几？", opts: ["2", "3", "4", "5"], a: 2 },
-  { q: "在天上飞的交通工具是什么？", opts: ["汽车", "轮船", "飞机", "自行车"], a: 2 },
-  { q: "星期一的后面是星期几？", opts: ["星期日", "星期五", "星期二", "星期三"], a: 2 },
-  { q: "鱼通常生活在哪里？", opts: ["树上", "土里", "水里", "火里"], a: 2 },
-  { q: "我们用什么器官来听声音？", opts: ["眼睛", "鼻子", "耳朵", "嘴巴"], a: 2 },
-  { q: "晴朗的天空通常是什么颜色的？", opts: ["绿色", "红色", "蓝色", "紫色"], a: 2 },
-  { q: "太阳从哪个方向升起？", opts: ["西方", "南方", "东方", "北方"], a: 2 },
-  { q: "小狗发出的叫声通常是？", opts: ["喵喵", "咩咩", "汪汪", "呱呱"], a: 2 },
+  { q: { en: "What does ice turn into when it melts?", zh: "冰融化后会变成什么？" }, opts: { en: ["Water", "Stone", "Wood", "Fire"], zh: ["水", "石头", "木头", "火"] }, a: 0 },
+  { q: { en: "How many eyes does a person normally have?", zh: "正常人有几只眼睛？" }, opts: { en: ["1", "2", "3", "4"], zh: ["1", "2", "3", "4"] }, a: 1 },
+  { q: { en: "Which of the following is a fruit?", zh: "以下哪个属于水果？" }, opts: { en: ["Cabbage", "Banana", "Pork", "Rice"], zh: ["白菜", "香蕉", "猪肉", "大米"] }, a: 1 },
+  { q: { en: "What is 1 + 2?", zh: "1 加 2 等于几？" }, opts: { en: ["2", "3", "4", "5"], zh: ["2", "3", "4", "5"] }, a: 1 },
+  { q: { en: "What is 5 - 2?", zh: "5 减 2 等于几？" }, opts: { en: ["1", "2", "3", "4"], zh: ["1", "2", "3", "4"] }, a: 2 },
+  { q: { en: "What is 2 x 3?", zh: "2 乘以 3 等于几？" }, opts: { en: ["4", "5", "6", "7"], zh: ["4", "5", "6", "7"] }, a: 2 },
+  { q: { en: "What is 10 + 5?", zh: "10 加 5 等于几？" }, opts: { en: ["10", "12", "15", "20"], zh: ["10", "12", "15", "20"] }, a: 2 },
+  { q: { en: "What is 8 - 4?", zh: "8 减 4 等于几？" }, opts: { en: ["2", "3", "4", "5"], zh: ["2", "3", "4", "5"] }, a: 2 },
+  { q: { en: "Which vehicle flies in the sky?", zh: "在天上飞的交通工具是什么？" }, opts: { en: ["Car", "Boat", "Airplane", "Bicycle"], zh: ["汽车", "轮船", "飞机", "自行车"] }, a: 2 },
+  { q: { en: "What day comes after Monday?", zh: "星期一的后面是星期几？" }, opts: { en: ["Sunday", "Friday", "Tuesday", "Wednesday"], zh: ["星期日", "星期五", "星期二", "星期三"] }, a: 2 },
+  { q: { en: "Where do fish usually live?", zh: "鱼通常生活在哪里？" }, opts: { en: ["In trees", "In soil", "In water", "In fire"], zh: ["树上", "土里", "水里", "火里"] }, a: 2 },
+  { q: { en: "Which organ do we use to hear sounds?", zh: "我们用什么器官来听声音？" }, opts: { en: ["Eyes", "Nose", "Ears", "Mouth"], zh: ["眼睛", "鼻子", "耳朵", "嘴巴"] }, a: 2 },
+  { q: { en: "What color is a clear sky usually?", zh: "晴朗的天空通常是什么颜色的？" }, opts: { en: ["Green", "Red", "Blue", "Purple"], zh: ["绿色", "红色", "蓝色", "紫色"] }, a: 2 },
+  { q: { en: "From which direction does the sun rise?", zh: "太阳从哪个方向升起？" }, opts: { en: ["West", "South", "East", "North"], zh: ["西方", "南方", "东方", "北方"] }, a: 2 },
+  { q: { en: "What sound does a dog usually make?", zh: "小狗发出的叫声通常是？" }, opts: { en: ["Meow", "Baa", "Woof", "Ribbit"], zh: ["喵喵", "咩咩", "汪汪", "呱呱"] }, a: 2 },
 ];
 
 // 本地题库验证配置
@@ -788,9 +1644,10 @@ async function resetUserVerificationAndRequireReverify({
     }
 
     // 通知用户需要重新验证
+    const noticeLang = await getUserLang(userId);
     await sendMessage({
       chat_id: userId,
-      text: '⚠️ <b>验证失效通知</b>\n\n您的话题可能已被删除或失效，需要重新验证。\n\n请点击 /start 重新开始验证流程。',
+      text: t(noticeLang, 'verification_expired_notice'),
       parse_mode: 'HTML'
     });
 
@@ -828,14 +1685,12 @@ async function setVerifyMode(mode) {
 }
 
 // 获取验证模式显示名称
-function getVerifyModeName(mode) {
-  const names = {
-    'local_quiz': '📝 本地题库',
-    'turnstile': '☁️ Turnstile',
-    'both': '🔒 双重验证'
-  };
-  return names[mode] || mode;
+function getVerifyModeName(mode, lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
+  const keys = { 'local_quiz': 'mode_local_quiz', 'turnstile': 'mode_turnstile', 'both': 'mode_both' };
+  return keys[mode] ? t(L, keys[mode]) : mode;
 }
+
 
 // 检查本地题库触发频率限制
 async function checkLocalQuizTriggerLimit(userId) {
@@ -999,52 +1854,49 @@ async function releaseVerifyLock(userId) {
 }
 
 // 验证答案
-async function verifyQuizAnswer(userId, answerIndex) {
+async function verifyQuizAnswer(userId, answerIndex, lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
   const challenge = await getQuizChallenge(userId);
   if (!challenge) {
-    return { success: false, reason: 'expired', message: '验证已过期，请重新获取题目' };
+    return { success: false, reason: 'expired', message: t(L, 'quiz_expired') };
   }
-
-  // 检查尝试次数
   if (challenge.attempts >= LOCAL_QUIZ_CONFIG.MAX_ATTEMPTS) {
     await deleteQuizChallenge(userId);
-    return { success: false, reason: 'max_attempts', message: '尝试次数过多，请重新获取题目' };
+    return { success: false, reason: 'max_attempts', message: t(L, 'quiz_max_attempts') };
   }
-
-  // 更新尝试次数
   challenge.attempts++;
   await KV.put(`quiz_challenge:${userId}`, JSON.stringify(challenge), {
     expirationTtl: LOCAL_QUIZ_CONFIG.CHALLENGE_TTL_SECONDS
   });
-
-  // 验证答案
   if (answerIndex === challenge.correctAnswer) {
     await deleteQuizChallenge(userId);
     return { success: true };
   }
-
   const remaining = LOCAL_QUIZ_CONFIG.MAX_ATTEMPTS - challenge.attempts;
   return {
     success: false,
     reason: 'wrong_answer',
-    message: `答案错误，还剩 ${remaining} 次机会`,
+    message: t(L, 'quiz_wrong', { remaining }),
     remaining
   };
 }
 
+
 // 生成题目 Inline Keyboard
-function generateQuizKeyboard(question) {
-  const buttons = question.opts.map((opt, idx) => ({
+function generateQuizKeyboard(question, lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
+  const opts = (question && question.opts && (question.opts[L] || question.opts.en)) || [];
+  const buttons = opts.map((opt, idx) => ({
     text: opt,
     callback_data: `quiz_answer:${idx}`
   }));
-  // 每行2个按钮
   const keyboard = [];
   for (let i = 0; i < buttons.length; i += 2) {
     keyboard.push(buttons.slice(i, i + 2));
   }
   return { inline_keyboard: keyboard };
 }
+
 
 // ========== 垃圾消息过滤函数 ==========
 
@@ -1129,13 +1981,13 @@ async function checkSpam(message, userId = null) {
   // 3. 检查链接数量
   const linkCount = countLinks(text);
   if (rules.maxLinks > 0 && linkCount >= rules.maxLinks) {
-    return { isSpam: true, reason: `链接过多 (${linkCount}/${rules.maxLinks})` };
+    return { isSpam: true, reasonKey: 'spam_reason_links', reasonVars: { count: linkCount, max: rules.maxLinks }, reason: `Too many links (${linkCount}/${rules.maxLinks})` };
   }
 
   // 4. 检查关键词
   for (const keyword of rules.keywords || []) {
     if (lowerText.includes(keyword.toLowerCase())) {
-      return { isSpam: true, reason: `命中关键词: ${keyword}` };
+      return { isSpam: true, reasonKey: 'spam_reason_keyword', reasonVars: { keyword }, reason: `Blocked keyword: ${keyword}` };
     }
   }
 
@@ -1144,7 +1996,7 @@ async function checkSpam(message, userId = null) {
     try {
       const regex = new RegExp(regexStr, 'i');
       if (regex.test(text)) {
-        return { isSpam: true, reason: '命中正则规则' };
+        return { isSpam: true, reasonKey: 'spam_reason_regex', reason: 'Matched a blocked pattern' };
       }
     } catch (e) { /* 忽略无效正则 */ }
   }
@@ -1161,6 +2013,15 @@ async function checkSpam(message, userId = null) {
 // ========== 垃圾话题管理 ==========
 
 // 获取垃圾话题配置
+// Format a spam-check reason in the receiving admin's language.
+// checkSpam returns reasonKey/reasonVars; older results may only carry `reason`.
+function formatSpamReason(lang, spamCheck) {
+  const L = normalizeLang(lang) || getDefaultLang();
+  if (spamCheck && spamCheck.reasonKey) return t(L, spamCheck.reasonKey, spamCheck.reasonVars || {});
+  if (spamCheck && spamCheck.reason) return spamCheck.reason;
+  return '';
+}
+
 async function getSpamTopicConfig() {
   return await safeGetJSON(KV_KEYS.SPAM_TOPIC_CONFIG, {
     enabled: CONFIG.SPAM_TOPIC_ENABLED,
@@ -1193,7 +2054,7 @@ async function createSpamTopic(groupId) {
     // 尝试创建一个新话题
     const response = await requestTelegram('createForumTopic', {
       chat_id: groupId,
-      name: '🗑 垃圾消息回收站',
+      name: t(getDefaultLang(), 'spam_topic_name'),
       icon_color: 0x8E8E8E  // 灰色图标
     });
 
@@ -1255,10 +2116,11 @@ async function silentlyForwardSpamMessage(message, groupId, topicId) {
     await forwardToSpamTopic(message, groupId, topicId);
 
     // 通知到垃圾话题，避免群组模式下打扰管理员私聊
+    const silentLang = await getUserLang(ADMIN_UID);
     await sendMessage({
       chat_id: groupId,
       message_thread_id: topicId,
-      text: `🗑 <b>垃圾消息已静默处理</b>\n\nUID: <code>${message.from?.id}</code>\n话题 ID: <code>${topicId}</code>\n\n<i>消息已转发到垃圾话题，用户无感知</i>`,
+      text: t(silentLang, 'spam_silently_handled', { uid: message.from?.id, topicId }),
       parse_mode: 'HTML'
     });
 
@@ -1434,9 +2296,10 @@ async function invalidateUserTopicMapping(userId, threadId = null) {
     const noticeKey = `topic_recover:${userId}`;
     const lastNotice = memGet(noticeKey);
     if (!lastNotice) {
+      const recoverLang = await getUserLang(ADMIN_UID);
       await sendMessage({
         chat_id: ADMIN_UID,
-        text: `⚠️ 访客 ${userId} 的话题已失效，正在尝试重新创建。`
+        text: t(recoverLang, 'topic_recover_notice', { userId })
       }).catch(() => { });
       memSet(noticeKey, Date.now(), 5 * 60 * 1000);
     }
@@ -1456,7 +2319,7 @@ async function createUserTopicThread(userId, profile = null) {
     Logger.error('create_user_topic_invalid_group_id', {
       userId,
       GROUP_ID,
-      hint: '群组ID必须以-100开头，请使用超级群组！'
+      hint: 'Group ID must start with -100. Please use a supergroup.'
     });
   }
 
@@ -1528,7 +2391,7 @@ function buildUserTopicTitle(userId, profile = null) {
   if (profile) {
     displayName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
   }
-  if (!displayName) displayName = '访客';
+  if (!displayName) displayName = t(getDefaultLang(), 'guest_default_name');
 
   let title = `${displayName}（${userId}）`;
   if (title.length > 60) {
@@ -1540,18 +2403,18 @@ function buildUserTopicTitle(userId, profile = null) {
 async function sendTopicWelcomeMessage(threadId, userId, profile = null) {
   if (!GROUP_ID) return;
   try {
+    const lang = await getUserLang(ADMIN_UID);
     const lines = [
-      '👤 <b>新访客对话</b>',
-      `UID：<code>${userId}</code>`
+      t(lang, 'topic_welcome_title'),
+      t(lang, 'topic_welcome_uid', { uid: userId })
     ];
     if (profile?.username) {
-      lines.push(`用户名：@${escapeHtml(profile.username)}`);
+      lines.push(t(lang, 'topic_welcome_username', { username: escapeHtml(profile.username) }));
     }
     if (profile?.first_name || profile?.last_name) {
-      lines.push(`昵称：${escapeHtml(`${profile.first_name || ''} ${profile.last_name || ''}`.trim())}`);
+      lines.push(t(lang, 'topic_welcome_nickname', { name: escapeHtml(`${profile.first_name || ''} ${profile.last_name || ''}`.trim()) }));
     }
-    lines.push('\n请在此话题内回复用户消息。');
-
+    lines.push('\n' + t(lang, 'topic_welcome_hint'));
     await sendMessage({
       chat_id: GROUP_ID,
       message_thread_id: threadId,
@@ -1563,6 +2426,7 @@ async function sendTopicWelcomeMessage(threadId, userId, profile = null) {
     Logger.warn('topic_welcome_message_failed', e, { userId, threadId });
   }
 }
+
 
 // ========== Workers AI 垃圾检测 ==========
 
@@ -1684,7 +2548,8 @@ ${text}
       Logger.info('ai_detected_spam', { userId, text: text.substring(0, 50) });
       return {
         isSpam: true,
-        reason: 'AI 识别为垃圾消息',
+        reasonKey: 'spam_reason_ai',
+        reason: 'Flagged as spam by AI',
         aiConfidence: 0.8,
         aiResponse
       };
@@ -1699,32 +2564,30 @@ ${text}
 }
 
 // 格式化规则为可读文本
-function formatSpamRules(rules) {
+function formatSpamRules(rules, lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
   const lines = [];
-  lines.push(`<b>链接限制:</b> 最多 ${rules.maxLinks} 个`);
-
+  lines.push(t(L, 'rules_link_limit', { max: rules.maxLinks }));
   if (rules.keywords && rules.keywords.length > 0) {
-    lines.push(`\n<b>拦截关键词 (${rules.keywords.length}个):</b>`);
+    lines.push(`\n${t(L, 'rules_block_keywords', { count: rules.keywords.length })}`);
     lines.push(rules.keywords.slice(0, 10).join(', '));
     if (rules.keywords.length > 10) {
-      lines.push(`... 等共 ${rules.keywords.length} 个`);
+      lines.push(t(L, 'rules_more', { count: rules.keywords.length }));
     }
   }
-
   if (rules.regexes && rules.regexes.length > 0) {
-    lines.push(`\n<b>拦截正则 (${rules.regexes.length}个):</b>`);
+    lines.push(`\n${t(L, 'rules_block_regex', { count: rules.regexes.length })}`);
     rules.regexes.slice(0, 3).forEach(r => lines.push(`• ${r}`));
     if (rules.regexes.length > 3) {
-      lines.push(`... 等共 ${rules.regexes.length} 个`);
+      lines.push(t(L, 'rules_more', { count: rules.regexes.length }));
     }
   }
-
   if (rules.allowKeywords && rules.allowKeywords.length > 0) {
-    lines.push(`\n<b>放行关键词:</b> ${rules.allowKeywords.join(', ')}`);
+    lines.push(`\n${t(L, 'rules_allow_keywords', { keywords: rules.allowKeywords.join(', ') })}`);
   }
-
   return lines.join('\n');
 }
+
 
 // 解析规则编辑文本
 function parseSpamRulesEdit(text) {
@@ -1743,7 +2606,7 @@ function parseSpamRulesEdit(text) {
     const lower = line.toLowerCase();
 
     // 清空默认规则指令
-    if (lower === '清空默认' || lower === 'clear') {
+    if (lower === '清空默认' || lower === 'clear defaults' || lower === 'clear') {
       clearDefaults = true;
       rules.keywords = [];
       rules.regexes = [];
@@ -2158,7 +3021,7 @@ async function sendKvQuotaExceededNotice() {
   try {
     await sendMessage({
       chat_id: ADMIN_UID,
-      text: '⚠️ <b>KV 配额超限</b>\n\nCloudflare KV 操作被限制（429），已自动暂停 KV 操作。\n请稍后重试，或检查 Cloudflare 后台的 KV 用量。',
+      text: t(await getUserLang(ADMIN_UID), 'kv_quota_notice'),
       parse_mode: 'HTML'
     });
   } catch (e) {
@@ -2966,22 +3829,24 @@ async function verifyTopicEnvironment(options = {}) {
   return status;
 }
 
-function describeTopicEnvIssue(status) {
+function describeTopicEnvIssue(status, lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
+  const desc = status.description || (L === 'zh' ? '未知错误' : 'unknown error');
   switch (status.reason) {
     case 'group_missing':
-      return 'GROUP_ID is not configured.';
+      return t(L, 'topic_issue_group_missing');
     case 'chat_inaccessible':
-      return `bot cannot access the configured group (${status.description || 'unknown error'}).`;
+      return t(L, 'topic_issue_chat_inaccessible', { description: desc });
     case 'not_forum':
-      return 'the target group has not enabled Topics.';
+      return t(L, 'topic_issue_not_forum');
     case 'not_admin':
-      return 'the bot is not an administrator in the group.';
+      return t(L, 'topic_issue_not_admin');
     case 'missing_manage_topics':
-      return 'the bot is missing the Manage Topics permission.';
+      return t(L, 'topic_issue_missing_manage_topics');
     case 'membership':
-      return `unable to read bot permissions: ${status.description || 'unknown error'}.`;
+      return t(L, 'topic_issue_membership', { description: desc });
     default:
-      return status.description || 'unexpected error while checking the forum group.';
+      return status.description || t(L, 'topic_issue_default');
   }
 }
 
@@ -2991,7 +3856,8 @@ async function maybeNotifyTopicEnvIssue(status) {
   if (last && Date.now() - last < TOPIC_ENV_ALERT_COOLDOWN_MS) return;
 
   memSet(TOPIC_ENV_ALERT_CACHE_KEY, Date.now(), TOPIC_ENV_ALERT_COOLDOWN_MS);
-  const text = `[Notice] Topic mode is unavailable: ${describeTopicEnvIssue(status)}`;
+  const lang = await getUserLang(ADMIN_UID);
+  const text = t(lang, 'topic_env_notice', { issue: describeTopicEnvIssue(status, lang) });
   try {
     await sendMessage({
       chat_id: ADMIN_UID,
@@ -3012,7 +3878,8 @@ async function isTopicForwardingEnabled() {
 async function reportError(error, context = "") {
   try {
     if (!ADMIN_UID || !TOKEN) return;
-    const errorText = `🚨 <b>SafeRelay 错误报告</b>\n\n<b>上下文:</b> ${context}\n<b>错误:</b> ${error.message}\n<b>时间:</b> ${new Date().toISOString()}`;
+    const reportLang = await getUserLang(ADMIN_UID);
+    const errorText = t(reportLang, 'error_report', { context, error: error.message, time: new Date().toISOString() });
     await sendMessage({
       chat_id: ADMIN_UID,
       text: errorText,
@@ -3370,23 +4237,26 @@ function classifyTelegramError(description) {
  * @param {string} defaultMsg - 默认消息
  * @returns {string} 用户友好消息
  */
-function getUserFriendlyErrorMessage(errorType, defaultMsg = '操作失败') {
-  const messages = {
-    message_not_found: '消息不存在或已过期',
-    empty_message: '消息内容不能为空',
-    message_too_long: '消息内容过长',
-    chat_not_found: '聊天不存在',
-    bot_blocked: '您已屏蔽机器人，请解除屏蔽后重试',
-    user_deactivated: '用户账号已注销',
-    permission_denied: '权限不足',
-    rate_limited: '操作过于频繁，请稍后再试',
-    network_error: '网络错误，请稍后重试',
-    auth_error: '认证失败，请检查配置',
-    timeout: '请求超时，请稍后重试',
-    unknown: defaultMsg
+function getUserFriendlyErrorMessage(errorType, defaultMsg = null, lang = null) {
+  const L = normalizeLang(lang) || getDefaultLang();
+  const keys = {
+    message_not_found: 'err_message_not_found',
+    empty_message: 'err_empty_message',
+    message_too_long: 'err_message_too_long',
+    chat_not_found: 'err_chat_not_found',
+    bot_blocked: 'err_bot_blocked',
+    user_deactivated: 'err_user_deactivated',
+    permission_denied: 'err_permission_denied',
+    rate_limited: 'err_rate_limited',
+    network_error: 'err_network_error',
+    auth_error: 'err_auth_error',
+    timeout: 'err_timeout',
+    unknown: null
   };
-  return messages[errorType] || defaultMsg;
+  if (keys[errorType]) return t(L, keys[errorType]);
+  return defaultMsg || t(L, 'err_generic');
 }
+
 
 async function requestTelegram(methodName, body, params = null, timeout = CONFIG.API_TIMEOUT_MS) {
   // 【安全改进】添加超时控制
@@ -3514,19 +4384,38 @@ async function deleteForwardedResultMessages(result, target) {
 
 // 设置 Telegram 命令列表
 async function setBotCommands() {
-  // ========== 普通用户命令（默认范围） ==========
-  const userCommands = [
+  const userCommandsEn = [
+    { command: 'start', description: 'Start verification / chat' },
+    { command: 'help', description: 'Show help' },
+    { command: 'language', description: 'Switch language' },
+  ];
+  const userCommandsZh = [
     { command: 'start', description: '开始验证 / 开始对话' },
     { command: 'help', description: '查看使用说明' },
+    { command: 'language', description: '切换语言' },
   ];
-
-  // ========== 管理员命令 ==========
-  const adminCommands = [
+  const adminCommandsEn = [
+    { command: 'menu', description: 'Open admin panel' },
+    { command: 'help', description: 'Show admin help' },
+    { command: 'language', description: 'Switch language' },
+    { command: 'ban', description: 'Block a user' },
+    { command: 'unban', description: 'Unblock a user' },
+    { command: 'trust', description: 'Trust a user (skip checks)' },
+    { command: 'untrust', description: 'Remove trust' },
+    { command: 'reset', description: 'Reset user verification' },
+    { command: 'broadcast', description: 'Broadcast to all users' },
+    { command: 'welcome', description: 'Set welcome message' },
+    { command: 'autoreply', description: 'Set auto-reply' },
+    { command: 'cleanup', description: 'Clean up invalid topics' },
+    { command: 'cachestats', description: 'View cache statistics' },
+  ];
+  const adminCommandsZh = [
     { command: 'menu', description: '打开管理面板' },
     { command: 'help', description: '查看管理员帮助' },
+    { command: 'language', description: '切换语言' },
     { command: 'ban', description: '封禁用户' },
     { command: 'unban', description: '解除封禁' },
-    { command: 'trust', description: '信任用户（白名单）' },
+    { command: 'trust', description: '信任用户（跳过检查）' },
     { command: 'untrust', description: '取消信任' },
     { command: 'reset', description: '重置用户验证状态' },
     { command: 'broadcast', description: '广播消息给所有用户' },
@@ -3535,28 +4424,35 @@ async function setBotCommands() {
     { command: 'cleanup', description: '清理失效话题映射' },
     { command: 'cachestats', description: '查看缓存统计信息' },
   ];
-
   try {
-    // 1. 清除旧残留 → 设置普通用户默认命令
     await requestTelegram('setMyCommands', {
-      commands: userCommands,
+      commands: userCommandsEn,
       scope: { type: 'default' }
     });
-    Logger.info('user_commands_set', { count: userCommands.length });
-
-    // 2. 为每个管理员单独设置管理命令
+    await requestTelegram('setMyCommands', {
+      commands: userCommandsZh,
+      scope: { type: 'default' },
+      language_code: 'zh'
+    });
+    Logger.info('user_commands_set', { count: userCommandsEn.length });
     const adminTargets = ADMIN_ID_LIST.length ? ADMIN_ID_LIST : (ADMIN_UID ? [ADMIN_UID] : []);
     for (const adminId of adminTargets) {
       await requestTelegram('setMyCommands', {
-        commands: adminCommands,
+        commands: adminCommandsEn,
         scope: { type: 'chat', chat_id: adminId }
       });
+      await requestTelegram('setMyCommands', {
+        commands: adminCommandsZh,
+        scope: { type: 'chat', chat_id: adminId },
+        language_code: 'zh'
+      });
     }
-    Logger.info('admin_commands_set', { admins: adminTargets.length, commands: adminCommands.length });
+    Logger.info('admin_commands_set', { admins: adminTargets.length, commands: adminCommandsEn.length });
   } catch (e) {
     Logger.error('set_commands_failed', e);
   }
 }
+
 
 /**
  * 验证环境变量配置
@@ -3569,7 +4465,7 @@ function validateEnvironment() {
   // 检查必需变量
   if (!TOKEN) missing.push('ENV_BOT_TOKEN');
   if (!SECRET) missing.push('ENV_BOT_SECRET');
-  if (!ADMIN_ID_LIST.length) missing.push('ENV_ADMIN_UID 或 ADMIN_IDS');
+  if (!ADMIN_ID_LIST.length) missing.push('ENV_ADMIN_UID or ADMIN_IDS');
 
   if (missing.length > 0) {
     return {
@@ -3694,6 +4590,11 @@ async function onUpdate(update, origin) {
       return handleQuizCallback(callbackQuery);
     }
 
+    // 语言切换回调（访客和管理员均可）
+    if (callbackQuery.data && (callbackQuery.data.startsWith('lang_set:') || callbackQuery.data === 'submenu_language' || callbackQuery.data === 'lang_menu')) {
+      return handleLanguageCallback(callbackQuery);
+    }
+
     // 处理验证模式切换回调（管理员）
     if (isAdmin(userId) && callbackQuery.data && callbackQuery.data.startsWith('verify_mode:')) {
       return handleVerifyModeCallback(callbackQuery);
@@ -3744,6 +4645,13 @@ async function onMessage(message, origin) {
   // 2. 如果是访客 (普通用户)
   else {
     const text = (message.text || '').trim();
+    const guestLang = await getUserLang(chatId);
+    const guestCmd = text.split(' ')[0].split('@')[0].toLowerCase();
+
+    // /language 与 /lang 对访客开放（在命令拦截之前处理）
+    if (guestCmd === '/language' || guestCmd === '/lang') {
+      return sendLanguageMenu(chatId, chatId);
+    }
 
     // 【话题模式】如果在话题中收到消息，说明用户已经在话题内，不需要验证
     // 这可能是用户在 General 话题或其他话题中发送的消息
@@ -3756,7 +4664,7 @@ async function onMessage(message, origin) {
       return; // 忽略话题中的消息，不触发验证
     }
 
-    // 【防骚扰】拦截普通用户发送的指令（除 /start 外）
+    // 【防骚扰】拦截普通用户发送的指令（除 /start 与 /language 外，后者已在上方处理）
     if (text.startsWith('/') && text !== '/start') {
       // 静默拦截，不返回任何提示
       Logger.debug('user_command_blocked', { userId: chatId, command: text.split(' ')[0] });
@@ -3770,7 +4678,8 @@ async function onMessage(message, origin) {
       if (text === '/start') {
         return sendMessage({
           chat_id: chatId,
-          text: '👋 欢迎使用 SafeRelay！\n\n您已在白名单中，可以直接发送消息给管理员。'
+          text: t(guestLang, 'guest_welcome_whitelisted'),
+          reply_markup: guestLanguageKeyboard(guestLang)
         });
       }
       return handleGuestMessage(message);
@@ -3783,7 +4692,8 @@ async function onMessage(message, origin) {
       if (isVerified) {
         return sendMessage({
           chat_id: chatId,
-          text: '👋 欢迎使用 SafeRelay！\n\n您已通过验证，可以直接发送消息给管理员。'
+          text: t(guestLang, 'guest_welcome_verified'),
+          reply_markup: guestLanguageKeyboard(guestLang)
         });
       } else {
         // 未验证，进入验证流程
@@ -3798,7 +4708,7 @@ async function onMessage(message, origin) {
       if (isUnionBanned) {
         return sendMessage({
           chat_id: chatId,
-          text: '🚫 <b>您已被联合封禁。</b>\n\n您的账号因违反服务条款被全局封禁。如有疑问，请联系管理员。',
+          text: t(guestLang, 'guest_union_banned'),
           parse_mode: 'HTML'
         });
       }
@@ -3807,15 +4717,18 @@ async function onMessage(message, origin) {
     // 1. 检查欺诈数据库
     const isFraud = await checkFraud(chatId);
     if (isFraud) {
-      // 通知管理员
-      await sendMessage({
-        chat_id: ADMIN_UID,
-        text: `🚨 <b>检测到欺诈用户</b>\n\nUID: <code>${chatId}</code>\n该用户出现在欺诈数据库中，已自动拦截。`,
-        parse_mode: 'HTML'
-      });
+      // 通知管理员（使用接收管理员自己的语言）
+      if (ADMIN_UID) {
+        const fraudAdminLang = await getUserLang(ADMIN_UID);
+        await sendMessage({
+          chat_id: ADMIN_UID,
+          text: t(fraudAdminLang, 'admin_fraud_detected', { uid: chatId }),
+          parse_mode: 'HTML'
+        });
+      }
       return sendMessage({
         chat_id: chatId,
-        text: '🚫 <b>服务不可用</b>\n\n您的账号存在异常，无法使用本服务。',
+        text: t(guestLang, 'guest_fraud_blocked'),
         parse_mode: 'HTML'
       });
     }
@@ -3826,7 +4739,7 @@ async function onMessage(message, origin) {
       // 被拉黑了，回复提示
       return sendMessage({
         chat_id: chatId,
-        text: '🚫 您已被管理员拉黑，无法发送消息。'
+        text: t(guestLang, 'guest_blocked')
       });
     }
 
@@ -3854,7 +4767,7 @@ async function onMessage(message, origin) {
           return sendMessage({
             chat_id: GROUP_ID,
             message_thread_id: message.message_thread_id,
-            text: '🚫 您的消息因违反规则被拦截。如有疑问请联系管理员。'
+            text: t(guestLang, 'guest_spam_blocked')
           });
         }
 
@@ -3869,21 +4782,24 @@ async function onMessage(message, origin) {
             // 用户无感知，不返回错误消息
             return sendMessage({
               chat_id: chatId,
-              text: '✅ 消息已发送'  // 假装成功发送
+              text: t(guestLang, 'guest_spam_fake_sent')  // 假装成功发送
             });
           }
         }
 
         // 传统模式：拦截并通知管理员
         // 记录垃圾消息
-        await sendMessage({
-          chat_id: ADMIN_UID,
-          text: `🗑 <b>垃圾消息拦截</b>\n\nUID: <code>${chatId}</code>\n原因: ${spamCheck.reason}\n\n<i>消息已拦截，未转发给管理员</i>`,
-          parse_mode: 'HTML'
-        });
+        if (ADMIN_UID) {
+          const spamAdminLang = await getUserLang(ADMIN_UID);
+          await sendMessage({
+            chat_id: ADMIN_UID,
+            text: t(spamAdminLang, 'admin_spam_intercepted', { uid: chatId, reason: formatSpamReason(spamAdminLang, spamCheck) }),
+            parse_mode: 'HTML'
+          });
+        }
         return sendMessage({
           chat_id: chatId,
-          text: '🚫 您的消息因违反规则被拦截。如有疑问请联系管理员。'
+          text: t(guestLang, 'guest_spam_blocked')
         });
       }
 
@@ -3892,7 +4808,7 @@ async function onMessage(message, origin) {
       if (!rateLimit.allowed) {
         return sendMessage({
           chat_id: chatId,
-          text: `⚠️ 发送过于频繁，请等待 ${rateLimit.retryAfter} 秒后再试。`
+          text: t(guestLang, 'guest_rate_limited', { seconds: rateLimit.retryAfter })
         });
       }
 
@@ -4051,7 +4967,8 @@ async function getVerifiedUsersPaged(page = 1, pageSize = 10, filter = 'all') {
 }
 
 // 生成主菜单
-async function generateMainMenu() {
+async function generateMainMenu(lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
   const welcomeMsg = await getConfig(CONFIG_KEYS.WELCOME_MSG);
   const autoReplyMsg = await getConfig(CONFIG_KEYS.AUTO_REPLY_MSG);
   const unionBanEnabled = await getConfig(CONFIG_KEYS.UNION_BAN, '0');
@@ -4059,421 +4976,269 @@ async function generateMainMenu() {
   const spamFilterEnabled = await getSpamFilterEnabled();
   const aiConfig = await getAISpamDetectionConfig();
   const forwardMode = await getForwardMode();
-
-  const spamFilterIcon = spamFilterEnabled ? '🟢' : '🔴';
-  const aiIcon = aiConfig.enabled ? '🟢' : '🔴';
-  const unionBanIcon = (unionBanEnabled === '1' || unionBanEnabled === 'true') ? '🟢' : '🔴';
-  const welcomeIcon = welcomeMsg ? '🟢' : '⚪️';
-  const autoReplyIcon = autoReplyMsg ? '🟢' : '⚪️';
-  const forwardStatus = forwardMode === FORWARD_MODES.TOPIC ? '💬 话题' : '📥 私聊';
-
-  const text = `🛠 <b>SafeRelay 管理面板</b>
-
-📊 <b>当前配置:</b>
-🔸 ${verifyMode === 'turnstile' ? '☁️' : '📝'} 验证模式：${getVerifyModeName(verifyMode)}
-🔸 ${spamFilterIcon} 垃圾过滤：${spamFilterEnabled ? '已开启' : '已关闭'}
-🔸 ${aiIcon} AI 检测：${aiConfig.enabled ? '已开启' : '已关闭'}
-🔸 ${unionBanIcon} 联合封禁：${(unionBanEnabled === '1' || unionBanEnabled === 'true') ? '已开启' : '已关闭'}
-🔸 ${welcomeIcon} 欢迎消息：${welcomeMsg ? '已设置' : '未设置'}
-🔸 ${autoReplyIcon} 自动回复：${autoReplyMsg ? '已设置' : '未设置'}
-🔸 ${forwardStatus} 转发模式：${forwardStatus}
-
-👇 点击下方按钮进入设置`;
-
+  const onOff = (v) => v ? `🟢 ${t(L, 'on')}` : `🔴 ${t(L, 'off')}`;
+  const setNot = (v) => v ? `🟢 ${t(L, 'set')}` : `🔴 ${t(L, 'not_set')}`;
+  const unionOn = (unionBanEnabled === '1' || unionBanEnabled === 'true');
+  const forwardLabel = forwardMode === FORWARD_MODES.TOPIC ? t(L, 'menu_forward_topic') : t(L, 'menu_forward_direct');
+  const text = `${t(L, 'menu_title')}\n\n${t(L, 'menu_current_config')}\n🛡️ ${t(L, 'menu_verify_mode', { mode: getVerifyModeName(verifyMode, L) })}\n🧹 ${t(L, 'menu_spam_filter', { status: onOff(spamFilterEnabled) })}\n🤖 ${t(L, 'menu_ai_detection', { status: onOff(aiConfig.enabled) })}\n🌐 ${t(L, 'menu_union_ban', { status: onOff(unionOn) })}\n👋 ${t(L, 'menu_welcome_msg', { status: setNot(!!welcomeMsg) })}\n✉️ ${t(L, 'menu_auto_reply', { status: setNot(!!autoReplyMsg) })}\n💬 ${t(L, 'menu_forward_mode', { mode: forwardLabel })}\n\n${t(L, 'menu_tap_below')}`;
   const keyboard = {
     inline_keyboard: [
-      [{ text: '🛡 验证模式', callback_data: 'submenu_verify' }, { text: '🗑 垃圾过滤', callback_data: 'submenu_spam' }],
-      [{ text: '🤖 AI 检测', callback_data: 'submenu_ai' }, { text: '🗑 垃圾话题', callback_data: 'submenu_spamtopic' }],
-      [{ text: '🌐 联合封禁', callback_data: 'submenu_union' }, { text: '👥 用户管理', callback_data: 'submenu_users' }],
-      [{ text: '👋 欢迎消息', callback_data: 'submenu_welcome' }, { text: '🤖 自动回复', callback_data: 'submenu_autoreply' }],
-      [{ text: '💬 转发模式', callback_data: 'submenu_forward' }],
-      [{ text: '📊 统计信息', callback_data: 'submenu_stats' }]
+      [{ text: t(L, 'btn_verify_mode'), callback_data: 'submenu_verify' }, { text: t(L, 'btn_spam_filter'), callback_data: 'submenu_spam' }],
+      [{ text: t(L, 'btn_ai_detection'), callback_data: 'submenu_ai' }, { text: t(L, 'btn_spam_topic'), callback_data: 'submenu_spamtopic' }],
+      [{ text: t(L, 'btn_union_ban'), callback_data: 'submenu_union' }, { text: t(L, 'btn_users'), callback_data: 'submenu_users' }],
+      [{ text: t(L, 'btn_welcome'), callback_data: 'submenu_welcome' }, { text: t(L, 'btn_autoreply'), callback_data: 'submenu_autoreply' }],
+      [{ text: t(L, 'btn_forward_mode'), callback_data: 'submenu_forward' }, { text: t(L, 'btn_stats'), callback_data: 'submenu_stats' }],
+      [{ text: t(L, 'btn_language'), callback_data: 'submenu_language' }]
     ]
   };
-
   return { text, reply_markup: keyboard };
 }
+
 
 // 生成垃圾过滤子菜单
-async function generateSpamFilterSubmenu() {
+async function generateSpamFilterSubmenu(lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
   const enabled = await getSpamFilterEnabled();
   const rules = await getSpamFilterRules();
-
-  const text = `🗑 <b>垃圾消息过滤设置</b>
-
-当前状态: <b>${enabled ? '🟢 已开启' : '🔴 已关闭'}</b>
-
-<b>当前规则:</b>
-${formatSpamRules(rules)}
-
-<b>快捷操作:</b>
-• 直接发送关键词添加拦截规则
-• 发送 <code>清空默认</code> 清空所有默认规则
-• 发送 <code>max_links:N</code> 设置链接限制
-• 发送 <code>allow:关键词</code> 添加放行规则
-
-💡 支持同时发送多行，每行一个规则`;
-
+  const status = enabled ? t(L, 'status_on_icon') : t(L, 'status_off_icon');
+  const text = `${t(L, 'spam_title')}\n\n${t(L, 'spam_status', { status })}\n\n${t(L, 'spam_current_rules')}\n${formatSpamRules(rules, L)}\n\n${t(L, 'spam_quick_actions')}\n\n${t(L, 'spam_multiline_note')}`;
   const keyboard = {
     inline_keyboard: [
-      [{ text: enabled ? '🔴 关闭过滤' : '🟢 开启过滤', callback_data: 'toggle_spam_filter' }],
-      [{ text: '🔑 关键词管理', callback_data: 'manage_keywords' }],
-      [{ text: '🔄 重置为默认规则', callback_data: 'reset_spam_rules' }],
-      [{ text: '◀️ 返回主菜单', callback_data: 'back_to_main' }]
+      [{ text: enabled ? t(L, 'btn_spam_off') : t(L, 'btn_spam_on'), callback_data: 'toggle_spam_filter' }],
+      [{ text: t(L, 'btn_manage_keywords'), callback_data: 'manage_keywords' }],
+      [{ text: t(L, 'btn_reset_rules'), callback_data: 'reset_spam_rules' }],
+      [{ text: t(L, 'btn_back_main'), callback_data: 'back_to_main' }]
     ]
   };
-
   return { text, reply_markup: keyboard };
 }
 
+
 // 生成关键词管理子菜单
-async function generateKeywordManagementSubmenu() {
+async function generateKeywordManagementSubmenu(lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
   const rules = await getSpamFilterRules();
   const keywords = rules.keywords || [];
   const allowKeywords = rules.allowKeywords || [];
   const regexes = rules.regexes || [];
   const allowRegexes = rules.allowRegexes || [];
-
-  const text = `🔑 <b>关键词规则管理</b>
-
-<b>拦截关键词 (${keywords.length}个):</b>
-${formatKeywordList(keywords, 10)}
-
-<b>放行关键词 (${allowKeywords.length}个):</b>
-${formatKeywordList(allowKeywords, 5)}
-
-<b>拦截正则 (${regexes.length}个):</b>
-${formatKeywordList(regexes, 3)}
-
-<b>放行正则 (${allowRegexes.length}个):</b>
-${formatKeywordList(allowRegexes, 3)}
-
-<b>管理方法:</b>
-• 添加拦截词：直接发送关键词
-• 添加放行词：<code>allow:关键词</code>
-• 添加正则：<code>regex:正则表达式</code>
-• 删除拦截词：<code>del:关键词</code>
-• 删除放行词：<code>delallow:关键词</code>
-• 清空所有：<code>清空默认</code>
-
-💡 关键词和正则会立即生效`;
-
+  const text = `${t(L, 'kw_title')}\n\n${t(L, 'kw_block_keywords', { count: keywords.length })}\n${formatKeywordList(keywords, 10, L)}\n\n${t(L, 'kw_allow_keywords', { count: allowKeywords.length })}\n${formatKeywordList(allowKeywords, 5, L)}\n\n${t(L, 'kw_block_regex', { count: regexes.length })}\n${formatKeywordList(regexes, 3, L)}\n\n${t(L, 'kw_allow_regex', { count: allowRegexes.length })}\n${formatKeywordList(allowRegexes, 3, L)}\n\n${t(L, 'kw_howto')}\n\n${t(L, 'kw_note')}`;
   const keyboard = {
     inline_keyboard: [
-      [{ text: '📋 查看完整列表', callback_data: 'view_all_keywords' }],
-      [{ text: '🗑️ 清空拦截词', callback_data: 'clear_keywords' }],
-      [{ text: '🔄 恢复默认规则', callback_data: 'reset_spam_rules' }],
-      [{ text: '◀️ 返回过滤设置', callback_data: 'back_to_spam_filter' }]
+      [{ text: t(L, 'btn_view_all_keywords'), callback_data: 'view_all_keywords' }],
+      [{ text: t(L, 'btn_clear_keywords'), callback_data: 'clear_keywords' }],
+      [{ text: t(L, 'btn_reset_rules'), callback_data: 'reset_spam_rules' }],
+      [{ text: t(L, 'btn_back_spam'), callback_data: 'back_to_spam_filter' }]
     ]
   };
-
   return { text, reply_markup: keyboard };
 }
 
-// 格式化关键词列表（用于显示）
-function formatKeywordList(keywords, maxDisplay = 10) {
-  if (!keywords || keywords.length === 0) {
-    return '<i>(空)</i>';
-  }
 
+// 格式化关键词列表（用于显示）
+function formatKeywordList(keywords, maxDisplay = 10, lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
+  if (!keywords || keywords.length === 0) {
+    return t(L, 'keyword_empty');
+  }
   const display = keywords.slice(0, maxDisplay);
   const text = display.map(k => `• <code>${escapeHtml(k)}</code>`).join('\n');
-
   if (keywords.length > maxDisplay) {
-    return text + `\n... 还有 ${keywords.length - maxDisplay} 个`;
+    return text + `\n${t(L, 'keyword_more', { count: keywords.length - maxDisplay })}`;
   }
-
   return text;
 }
 
+
 // 生成 AI 检测设置子菜单
-async function generateAISpamSubmenu() {
+async function generateAISpamSubmenu(lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
   const aiConfig = await getAISpamDetectionConfig();
   const rateLimit = await checkAIRateLimit();
-
-  const text = `🤖 <b>AI 垃圾检测设置</b>
-
-当前状态：<b>${aiConfig.enabled ? '🟢 已开启' : '🔴 已关闭'}</b>
-
-<b>配置信息:</b>
-🔹 置信度阈值：${aiConfig.confidenceThreshold || 0.7}
-🔹 每小时限额：${CONFIG.AI_RATE_LIMIT_PER_HOUR} 次
-🔹 剩余次数：${rateLimit.remaining} 次
-${!rateLimit.allowed ? `🔹 重置时间：${rateLimit.resetAfter} 秒后` : ''}
-
-<b>使用说明:</b>
-• AI 检测作为关键词过滤的补充
-• 自动识别广告、推广、投资等垃圾内容
-• 需要配置 Cloudflare Workers AI
-
-<b>环境变量:</b>
-<code>CF_ACCOUNT_ID</code> - Cloudflare Account ID
-<code>CF_AI_TOKEN</code> - Cloudflare AI API Token
-
-💡 建议：先使用关键词过滤，AI 作为兜底策略`;
-
+  const status = aiConfig.enabled ? t(L, 'status_on_icon') : t(L, 'status_off_icon');
+  const lines = [
+    t(L, 'ai_title'), '',
+    t(L, 'ai_status', { status }), '',
+    t(L, 'ai_config_title'),
+    `• ${t(L, 'ai_threshold', { value: aiConfig.confidenceThreshold || 0.7 })}`,
+    `• ${t(L, 'ai_hourly_limit', { limit: CONFIG.AI_RATE_LIMIT_PER_HOUR })}`,
+    `• ${t(L, 'ai_remaining', { remaining: rateLimit.remaining })}`
+  ];
+  if (!rateLimit.allowed) lines.push(`• ${t(L, 'ai_reset_in', { seconds: rateLimit.resetAfter })}`);
+  lines.push('', t(L, 'ai_howto'), '', t(L, 'ai_env_title'), '<code>CF_ACCOUNT_ID</code> - Cloudflare Account ID', '<code>CF_AI_TOKEN</code> - Cloudflare AI API Token', '', t(L, 'ai_tip'));
+  const text = lines.join('\n');
   const keyboard = {
     inline_keyboard: [
-      [{ text: aiConfig.enabled ? '🔴 关闭 AI 检测' : '🟢 开启 AI 检测', callback_data: 'toggle_ai_detection' }],
-      [{ text: '⚙️ 调整置信度', callback_data: 'ai_confidence' }],
-      [{ text: '📊 查看使用统计', callback_data: 'ai_stats' }],
-      [{ text: '◀️ 返回主菜单', callback_data: 'back_to_main' }]
+      [{ text: aiConfig.enabled ? t(L, 'btn_ai_off') : t(L, 'btn_ai_on'), callback_data: 'toggle_ai_detection' }],
+      [{ text: t(L, 'btn_ai_confidence'), callback_data: 'ai_confidence' }],
+      [{ text: t(L, 'btn_ai_stats'), callback_data: 'ai_stats' }],
+      [{ text: t(L, 'btn_back_main'), callback_data: 'back_to_main' }]
     ]
   };
-
   return { text, reply_markup: keyboard };
 }
 
+
 // 生成垃圾话题设置子菜单
-async function generateSpamTopicSubmenu() {
+async function generateSpamTopicSubmenu(lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
   const config = await getSpamTopicConfig();
   const spamFilterEnabled = await getSpamFilterEnabled();
   const aiEnabled = await isAISpamDetectionEnabled();
-
-  const text = `🗑 <b>垃圾话题管理设置</b>
-
-当前状态：<b>${config.enabled ? '🟢 已开启' : '🔴 已关闭'}</b>
-
-<b>配置信息:</b>
-🔹 垃圾话题 ID: ${config.topicId || '(未设置)'}
-🔹 自动创建：${config.autoCreate ? '✅' : '❌'}
-🔹 管理员通知：${config.notifyAdmin ? '✅' : '❌'}
-
-<b>关联功能:</b>
-🔸 垃圾过滤：${spamFilterEnabled ? '🟢' : '🔴'}
-🔸 AI 检测：${aiEnabled ? '🟢' : '🔴'}
-
-<b>使用说明:</b>
-• 垃圾话题用于隔离垃圾消息
-• 可选择静默转发（用户无感知）
-• 管理员可随时查看和恢复消息
-
-<b>操作步骤:</b>
-1. 配置群组 ID（论坛群组）
-2. 点击"自动创建话题"或手动指定
-3. 开启垃圾话题功能
-4. 配合垃圾过滤和 AI 检测使用`;
-
+  const status = config.enabled ? t(L, 'status_on_icon') : t(L, 'status_off_icon');
+  const text = `${t(L, 'st_title')}\n\n${t(L, 'st_status', { status })}\n\n${t(L, 'st_config_title')}\n• ${t(L, 'st_topic_id', { id: config.topicId || t(L, 'st_not_set') })}\n• ${t(L, 'st_auto_create', { icon: config.autoCreate ? '✅' : '❌' })}\n• ${t(L, 'st_notify_admin', { icon: config.notifyAdmin ? '✅' : '❌' })}\n\n${t(L, 'st_related_title')}\n• ${t(L, 'st_related_spam', { icon: spamFilterEnabled ? '🟢' : '🔴' })}\n• ${t(L, 'st_related_ai', { icon: aiEnabled ? '🟢' : '🔴' })}\n\n${t(L, 'st_howto')}\n\n${t(L, 'st_steps')}`;
   const keyboard = {
     inline_keyboard: [
-      [{ text: config.enabled ? '🔴 关闭垃圾话题' : '🟢 开启垃圾话题', callback_data: 'toggle_spam_topic' }],
-      [{ text: '🏗️ 自动创建话题', callback_data: 'create_spam_topic' }],
-      [{ text: '⚙️ 配置话题 ID', callback_data: 'config_spam_topic_id' }],
-      [{ text: '📊 查看垃圾消息', callback_data: 'view_spam_messages' }],
-      [{ text: '◀️ 返回主菜单', callback_data: 'back_to_main' }]
+      [{ text: config.enabled ? t(L, 'btn_st_off') : t(L, 'btn_st_on'), callback_data: 'toggle_spam_topic' }],
+      [{ text: t(L, 'btn_st_create'), callback_data: 'create_spam_topic' }],
+      [{ text: t(L, 'btn_st_config_id'), callback_data: 'config_spam_topic_id' }],
+      [{ text: t(L, 'btn_st_view'), callback_data: 'view_spam_messages' }],
+      [{ text: t(L, 'btn_back_main'), callback_data: 'back_to_main' }]
     ]
   };
-
   return { text, reply_markup: keyboard };
 }
 
-async function generateForwardModeSubmenu() {
+
+async function generateForwardModeSubmenu(lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
   const mode = await getForwardMode();
   const issues = [];
-  if (!GROUP_ID) issues.push('• 未设置 GROUP_ID 环境变量');
-  if (!ADMIN_UID) issues.push('• 未设置 ENV_ADMIN_UID（主管理员）');
-
-  const text = `💬 <b>消息转发模式</b>
-
-当前模式：<b>${mode === FORWARD_MODES.TOPIC ? '话题模式（论坛群组）' : '私聊模式（管理员私聊）'}</b>
-
-<b>说明：</b>
-• 私聊模式：所有消息只发到管理员私聊
-• 话题模式：每个访客自动创建话题，消息转发到论坛群组
-
-${issues.length ? '<b>启用话题模式前请完成：</b>\n' + issues.join('\n') : '✅ 话题模式条件已满足，可随时开启。'}
-
-在话题模式下，请确保机器人是群组管理员并具备「管理话题」权限。`;
-
+  if (!GROUP_ID) issues.push(t(L, 'fwd_issue_group'));
+  if (!ADMIN_UID) issues.push(t(L, 'fwd_issue_admin'));
+  const modeLabel = mode === FORWARD_MODES.TOPIC ? t(L, 'fwd_mode_topic_label') : t(L, 'fwd_mode_direct_label');
+  const readiness = issues.length ? `${t(L, 'fwd_prereq_title')}\n${issues.join('\n')}` : t(L, 'fwd_ready');
+  const text = `${t(L, 'fwd_title')}\n\n${t(L, 'fwd_current', { mode: modeLabel })}\n\n${t(L, 'fwd_desc')}\n\n${readiness}\n\n${t(L, 'fwd_note')}`;
   const keyboard = {
     inline_keyboard: [
-      [{ text: (mode === FORWARD_MODES.DIRECT ? '✅ ' : '') + '📥 私聊转发', callback_data: 'forward_mode:direct' }],
-      [{ text: (mode === FORWARD_MODES.TOPIC ? '✅ ' : '') + '💬 话题转发', callback_data: 'forward_mode:topic' }],
-      [{ text: '◀️ 返回主菜单', callback_data: 'back_to_main' }]
+      [{ text: (mode === FORWARD_MODES.DIRECT ? '✅ ' : '') + t(L, 'btn_fwd_direct'), callback_data: 'forward_mode:direct' }],
+      [{ text: (mode === FORWARD_MODES.TOPIC ? '✅ ' : '') + t(L, 'btn_fwd_topic'), callback_data: 'forward_mode:topic' }],
+      [{ text: t(L, 'btn_back_main'), callback_data: 'back_to_main' }]
     ]
   };
-
   return { text, reply_markup: keyboard };
 }
+
 
 // 生成验证模式子菜单
-async function generateVerifySubmenu() {
+async function generateVerifySubmenu(lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
   const currentMode = await getVerifyMode();
   const turnstileAvailable = hasTurnstileConfigured();
-
-  let text = `🛡 <b>验证模式设置</b>
-
-当前模式: <b>${getVerifyModeName(currentMode)}</b>
-
-<b>可选模式:</b>
-📝 <b>本地题库</b> - 使用内置简单题目验证（默认，无需配置）
-☁️ <b>Turnstile</b> - 使用 Cloudflare Turnstile 网页验证
-🔒 <b>双重验证</b> - 需要同时通过两种验证
-
-`;
-
+  let text = `${t(L, 'verify_title')}\n\n${t(L, 'verify_current', { mode: getVerifyModeName(currentMode, L) })}\n\n${t(L, 'verify_options_title')}\n${t(L, 'verify_options_block')}\n`;
   if (!turnstileAvailable) {
-    text += `⚠️ <b>注意:</b> 未检测到 Turnstile 配置，只能使用本地题库验证。
-请在环境变量中配置 CF_TURNSTILE_SITE_KEY 和 CF_TURNSTILE_SECRET_KEY 后使用其他模式。`;
+    text += `\n${t(L, 'verify_turnstile_missing')}`;
   }
-
   const keyboard = {
     inline_keyboard: [
-      [{ text: (currentMode === 'local_quiz' ? '✅ ' : '') + '📝 本地题库', callback_data: 'verify_mode:local_quiz' }],
-      [{ text: (currentMode === 'turnstile' ? '✅ ' : '') + '☁️ Turnstile', callback_data: 'verify_mode:turnstile' }],
-      [{ text: (currentMode === 'both' ? '✅ ' : '') + '🔒 双重验证', callback_data: 'verify_mode:both' }],
-      [{ text: '◀️ 返回主菜单', callback_data: 'back_to_main' }]
+      [{ text: (currentMode === 'local_quiz' ? '✅ ' : '') + t(L, 'mode_local_quiz'), callback_data: 'verify_mode:local_quiz' }],
+      [{ text: (currentMode === 'turnstile' ? '✅ ' : '') + t(L, 'mode_turnstile'), callback_data: 'verify_mode:turnstile' }],
+      [{ text: (currentMode === 'both' ? '✅ ' : '') + t(L, 'mode_both'), callback_data: 'verify_mode:both' }],
+      [{ text: t(L, 'btn_back_main'), callback_data: 'back_to_main' }]
     ]
   };
-
   return { text, reply_markup: keyboard };
 }
+
 
 // 生成联合封禁子菜单
-async function generateUnionBanSubmenu() {
+async function generateUnionBanSubmenu(lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
   const unionBanEnabled = await getConfig(CONFIG_KEYS.UNION_BAN, '0');
   const isEnabled = unionBanEnabled === '1' || unionBanEnabled === 'true';
-
-  const text = `🌐 <b>联合封禁设置</b>
-
-  当前状态: ${isEnabled ? '🟢 已开启' : '🔴 已关闭'}
-
-  联合封禁可以自动拦截已被其他服务标记为恶意的用户。
-
-  👇 点击下方按钮切换状态`;
-
+  const status = isEnabled ? t(L, 'status_on_icon') : t(L, 'status_off_icon');
+  const text = `${t(L, 'union_title')}\n\n${t(L, 'union_status', { status })}\n\n${t(L, 'union_desc')}\n\n${t(L, 'union_tap')}`;
   const keyboard = {
     inline_keyboard: [
-      [{ text: isEnabled ? '🔴 关闭联合封禁' : '🟢 开启联合封禁', callback_data: 'toggle_union' }],
-      [{ text: '◀️ 返回主菜单', callback_data: 'back_to_main' }]
+      [{ text: isEnabled ? t(L, 'btn_union_off') : t(L, 'btn_union_on'), callback_data: 'toggle_union' }],
+      [{ text: t(L, 'btn_back_main'), callback_data: 'back_to_main' }]
     ]
   };
-
   return { text, reply_markup: keyboard };
 }
+
 
 // 生成欢迎消息子菜单
-async function generateWelcomeSubmenu() {
+async function generateWelcomeSubmenu(lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
   const current = await getConfig(CONFIG_KEYS.WELCOME_MSG);
-  const currentText = current ? escapeHtml(current) : "(未设置，使用默认消息)";
-
-  const text = `👋 <b>欢迎消息设置</b>
-
-  📄 <b>当前内容:</b>
-  <pre>${currentText}</pre>
-
-  💡 <b>使用方法:</b>
-  • 发送 <code>/welcome 消息内容</code> 设置新消息
-  • 发送 <code>/welcome delete</code> 删除并使用默认
-
-  用户首次联系机器人时会看到此消息。`;
-
+  const currentText = current ? escapeHtml(current) : t(L, 'welcome_not_set');
+  const text = `${t(L, 'welcome_title')}\n\n${t(L, 'welcome_current')}\n<pre>${currentText}</pre>\n\n${t(L, 'welcome_howto')}`;
   const keyboard = {
     inline_keyboard: [
-      [{ text: '🔄 刷新状态', callback_data: 'refresh_welcome' }],
-      [{ text: '◀️ 返回主菜单', callback_data: 'back_to_main' }]
+      [{ text: t(L, 'btn_refresh'), callback_data: 'refresh_welcome' }],
+      [{ text: t(L, 'btn_back_main'), callback_data: 'back_to_main' }]
     ]
   };
-
   return { text, reply_markup: keyboard };
 }
+
 
 // 生成自动回复子菜单
-async function generateAutoreplySubmenu() {
+async function generateAutoreplySubmenu(lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
   const current = await getConfig(CONFIG_KEYS.AUTO_REPLY_MSG);
-  const currentText = current ? escapeHtml(current) : "(已关闭)";
-
-  const text = `🤖 <b>自动回复设置</b>
-
-  📄 <b>当前内容:</b>
-  <pre>${currentText}</pre>
-
-  💡 <b>使用方法:</b>
-  • 发送 <code>/autoreply 消息内容</code> 设置自动回复
-  • 发送 <code>/autoreply off</code> 关闭自动回复
-
-  已验证用户发送 /start 时会收到此回复。`;
-
+  const currentText = current ? escapeHtml(current) : t(L, 'autoreply_not_set');
+  const text = `${t(L, 'autoreply_title')}\n\n${t(L, 'autoreply_current')}\n<pre>${currentText}</pre>\n\n${t(L, 'autoreply_howto')}`;
   const keyboard = {
     inline_keyboard: [
-      [{ text: '🔄 刷新状态', callback_data: 'refresh_autoreply' }],
-      [{ text: '◀️ 返回主菜单', callback_data: 'back_to_main' }]
+      [{ text: t(L, 'btn_refresh'), callback_data: 'refresh_autoreply' }],
+      [{ text: t(L, 'btn_back_main'), callback_data: 'back_to_main' }]
     ]
   };
-
   return { text, reply_markup: keyboard };
 }
+
 
 // 生成统计信息子菜单
-async function generateStatsSubmenu() {
+async function generateStatsSubmenu(lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
   const stats = await getStats();
   const today = new Date().toISOString().split('T')[0];
-
-  const text = `📊 <b>统计信息</b>
-
-  📅 <b>今日数据 (${today})</b>
-  • 消息数: ${stats.todayMessages}
-  • 活跃用户: ${stats.todayActiveUsers}
-
-  📈 <b>累计数据</b>
-  • 总消息数: ${stats.totalMessages}
-
-  💡 数据每小时自动更新`;
-
+  const text = `${t(L, 'stats_title')}\n\n${t(L, 'stats_today', { date: today })}\n• ${t(L, 'stats_today_messages', { count: stats.todayMessages })}\n• ${t(L, 'stats_today_active', { count: stats.todayActiveUsers })}\n\n${t(L, 'stats_total_title')}\n• ${t(L, 'stats_total_messages', { count: stats.totalMessages })}\n\n${t(L, 'stats_note')}`;
   const keyboard = {
     inline_keyboard: [
-      [{ text: '🔄 刷新数据', callback_data: 'refresh_stats' }],
-      [{ text: '◀️ 返回主菜单', callback_data: 'back_to_main' }]
+      [{ text: t(L, 'btn_refresh'), callback_data: 'refresh_stats' }],
+      [{ text: t(L, 'btn_back_main'), callback_data: 'back_to_main' }]
     ]
   };
-
   return { text, reply_markup: keyboard };
 }
 
+
 // 生成用户管理子菜单
-async function generateUsersSubmenu(page = 1, filter = 'all') {
+async function generateUsersSubmenu(page = 1, filter = 'all', lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
   const result = await getVerifiedUsersPaged(page, 10, filter);
   const stats = await getUserStats();
-
-  const filterLabel = { all: '全部用户', whitelisted: '信任用户', blocked: '拉黑用户' }[filter] || '';
-
+  const filterLabel = { all: t(L, 'filter_all'), whitelisted: t(L, 'filter_whitelisted'), blocked: t(L, 'filter_blocked') }[filter] || '';
+  const summary = t(L, 'users_summary', { total: stats.total, whitelisted: stats.whitelisted, blocked: stats.blocked });
+  const makeFilterButtons = () => [
+    { text: (filter === 'all' ? '✅ ' : '') + t(L, 'filter_all_short'), callback_data: 'users_filter:all' },
+    { text: (filter === 'whitelisted' ? '✅ ' : '') + t(L, 'filter_whitelisted_short'), callback_data: 'users_filter:whitelisted' },
+    { text: (filter === 'blocked' ? '✅ ' : '') + t(L, 'filter_blocked_short'), callback_data: 'users_filter:blocked' }
+  ];
   if (result.total === 0) {
-    const text = `👥 <b>用户管理</b> · ${filterLabel}
-
-📊 全部 ${stats.total} | ⭐信任 ${stats.whitelisted} | 🚫拉黑 ${stats.blocked}
-
-暂无匹配用户。`;
-
-    const filterButtons = [
-      { text: (filter === 'all' ? '✅ ' : '') + '全部', callback_data: 'users_filter:all' },
-      { text: (filter === 'whitelisted' ? '✅ ' : '') + '⭐信任', callback_data: 'users_filter:whitelisted' },
-      { text: (filter === 'blocked' ? '✅ ' : '') + '🚫拉黑', callback_data: 'users_filter:blocked' }
-    ];
-
+    const text = `${t(L, 'users_title')} · ${filterLabel}\n\n${summary}\n\n${t(L, 'users_empty')}`;
     return {
       text,
       reply_markup: {
         inline_keyboard: [
-          filterButtons,
-          [{ text: '🔄 刷新', callback_data: `refresh_users:${page}:${filter}` }],
-          [{ text: '◀️ 返回主菜单', callback_data: 'back_to_main' }]
+          makeFilterButtons(),
+          [{ text: t(L, 'btn_refresh'), callback_data: `refresh_users:${page}:${filter}` }],
+          [{ text: t(L, 'btn_back_main'), callback_data: 'back_to_main' }]
         ]
       }
     };
   }
-
-  // 构建用户列表 — 统一用名字显示，无资料的退回到 ID
   let userList = '';
   const userButtons = [];
   let idx = (page - 1) * 10 + 1;
-
   for (const user of result.users) {
     const status = user.blocked ? '🚫' : (user.whitelisted ? '⭐' : '•');
-
     const profile = await getUserProfile(user.id);
     let displayName = '';
     let usernameStr = '';
-
     if (profile) {
       displayName = [profile.first_name, profile.last_name].filter(Boolean).join(' ');
       if (!displayName) displayName = profile.username || '';
@@ -4481,19 +5246,14 @@ async function generateUsersSubmenu(page = 1, filter = 'all') {
     } else if (user.name && user.name !== 'Unknown') {
       displayName = user.name;
     }
-
     if (!displayName) displayName = user.id;
-
-    // 列表文本行
     let line = `${idx}. ${status} <b>${escapeHtml(displayName)}</b>`;
     if (usernameStr) line += `  ${escapeHtml(usernameStr)}`;
     line += `\n   UID: <code>${user.id}</code>`;
-    if (user.whitelisted) line += ` · ⭐信任`;
-    if (user.blocked) line += ` · 🚫拉黑`;
+    if (user.whitelisted) line += ` · ${t(L, 'users_trusted_tag')}`;
+    if (user.blocked) line += ` · ${t(L, 'users_blocked_tag')}`;
     line += '\n';
     userList += line;
-
-    // 收集所有用户按钮 — 序号 + 状态图标
     let btnIcon = '';
     if (user.whitelisted) btnIcon = '⭐';
     if (user.blocked) btnIcon = '🚫';
@@ -4501,58 +5261,39 @@ async function generateUsersSubmenu(page = 1, filter = 'all') {
       text: `${idx}${btnIcon}`,
       callback_data: `user_menu:${user.id}:${page}:${filter}`
     });
-
     idx++;
   }
-
-  // 每行 5 个序号按钮
   const userButtonRows = [];
   for (let i = 0; i < userButtons.length; i += 5) {
     userButtonRows.push(userButtons.slice(i, i + 5));
   }
-
-  const text = `👥 <b>用户管理</b> · ${filterLabel}
-
-📊 全部 ${stats.total} | ⭐信任 ${stats.whitelisted} | 🚫拉黑 ${stats.blocked}  第 ${result.page}/${result.totalPages} 页
-
-${userList}
-💡 点击下方序号按钮即可管理对应用户`;
-
-  // 分页
+  const text = `${t(L, 'users_title')} · ${filterLabel}\n\n${summary}  ${t(L, 'users_page_info', { page: result.page, totalPages: result.totalPages })}\n\n${userList}\n${t(L, 'users_hint')}`;
   const paginationButtons = [];
   if (result.page > 1) {
-    paginationButtons.push({ text: '◀️ 上页', callback_data: `users_page:${result.page - 1}:${filter}` });
+    paginationButtons.push({ text: t(L, 'btn_prev_page'), callback_data: `users_page:${result.page - 1}:${filter}` });
   }
   if (result.page < result.totalPages) {
-    paginationButtons.push({ text: '下页 ▶️', callback_data: `users_page:${result.page + 1}:${filter}` });
+    paginationButtons.push({ text: t(L, 'btn_next_page'), callback_data: `users_page:${result.page + 1}:${filter}` });
   }
-
-  // 过滤
-  const filterButtons = [
-    { text: (filter === 'all' ? '✅ ' : '') + '全部', callback_data: 'users_filter:all' },
-    { text: (filter === 'whitelisted' ? '✅ ' : '') + '⭐信任', callback_data: 'users_filter:whitelisted' },
-    { text: (filter === 'blocked' ? '✅ ' : '') + '🚫拉黑', callback_data: 'users_filter:blocked' }
-  ];
-
-  const keyboardRows = [filterButtons];
+  const keyboardRows = [makeFilterButtons()];
   if (paginationButtons.length) keyboardRows.push(paginationButtons);
   keyboardRows.push(...userButtonRows);
   keyboardRows.push([
-    { text: '🔄 刷新', callback_data: `refresh_users:${result.page}:${filter}` },
-    { text: '◀️ 返回主菜单', callback_data: 'back_to_main' }
+    { text: t(L, 'btn_refresh'), callback_data: `refresh_users:${result.page}:${filter}` },
+    { text: t(L, 'btn_back_main'), callback_data: 'back_to_main' }
   ]);
-
   return { text, reply_markup: { inline_keyboard: keyboardRows } };
 }
 
+
 // 生成单个用户的操作子菜单
-async function generateUserActionSubmenu(userId, page, filter) {
+async function generateUserActionSubmenu(userId, page, filter, lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
   const [whitelisted, blocked, profile] = await Promise.all([
     isWhitelisted(userId),
     isBlockedCached(userId),
     getUserProfile(userId)
   ]);
-
   let displayName = '';
   let usernameStr = '';
   if (profile) {
@@ -4561,43 +5302,33 @@ async function generateUserActionSubmenu(userId, page, filter) {
     if (profile.username && displayName !== profile.username) usernameStr = `@${profile.username}`;
   }
   if (!displayName) displayName = userId;
-
   const statusIcon = blocked ? '🚫' : (whitelisted ? '⭐' : '👤');
-  const statusText = blocked ? '已拉黑' : (whitelisted ? '已信任' : '普通用户');
-
-  let text = `👤 <b>${escapeHtml(displayName)}</b>
-═══════════════
-
-🆔 UID: <code>${userId}</code>`;
+  const statusText = blocked ? t(L, 'user_status_blocked') : (whitelisted ? t(L, 'user_status_trusted') : t(L, 'user_status_normal'));
+  let text = `👤 <b>${escapeHtml(displayName)}</b>\n═══════════════\n\n${t(L, 'user_uid_line', { uid: userId })}`;
   if (usernameStr) text += `\n📎 ${escapeHtml(usernameStr)}`;
-  text += `\n📌 状态：${statusIcon} ${statusText}
-
-请选择操作：`;
-
+  text += `\n${t(L, 'user_status_line', { icon: statusIcon, status: statusText })}\n\n${t(L, 'user_choose_action')}`;
   const actionButtons = [];
-
   if (whitelisted) {
-    actionButtons.push({ text: '❌ 取消信任', callback_data: `user_untrust:${userId}:${page}:${filter}` });
+    actionButtons.push({ text: t(L, 'btn_untrust'), callback_data: `user_untrust:${userId}:${page}:${filter}` });
   } else {
-    actionButtons.push({ text: '⭐ 信任', callback_data: `user_trust:${userId}:${page}:${filter}` });
+    actionButtons.push({ text: t(L, 'btn_trust'), callback_data: `user_trust:${userId}:${page}:${filter}` });
   }
-
   if (blocked) {
-    actionButtons.push({ text: '✅ 解封', callback_data: `user_unblock:${userId}:${page}:${filter}` });
+    actionButtons.push({ text: t(L, 'btn_unblock'), callback_data: `user_unblock:${userId}:${page}:${filter}` });
   } else {
-    actionButtons.push({ text: '🚫 拉黑', callback_data: `user_block:${userId}:${page}:${filter}` });
+    actionButtons.push({ text: t(L, 'btn_block'), callback_data: `user_block:${userId}:${page}:${filter}` });
   }
-
   return {
     text,
     reply_markup: {
       inline_keyboard: [
         actionButtons,
-        [{ text: '← 返回用户列表', callback_data: `users_page:${page}:${filter}` }]
+        [{ text: t(L, 'btn_back_users'), callback_data: `users_page:${page}:${filter}` }]
       ]
     }
   };
 }
+
 
 // 获取用户统计
 async function getUserStats() {
@@ -4626,6 +5357,7 @@ async function handleAdminCallback(callbackQuery) {
   const chatId = callbackQuery.message.chat.id;
   const messageId = callbackQuery.message.message_id;
   const adminChatId = String(callbackQuery.from.id); // 使用回调用户的 ID
+  const lang = await getUserLang(adminChatId);
 
   // 空操作（页码显示按钮等）
   if (data === 'noop') {
@@ -4634,7 +5366,7 @@ async function handleAdminCallback(callbackQuery) {
 
   // 返回主菜单
   if (data === 'back_to_main') {
-    const menu = await generateMainMenu();
+    const menu = await generateMainMenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4646,7 +5378,7 @@ async function handleAdminCallback(callbackQuery) {
   }
 
   if (data === 'back_to_ai_menu') {
-    const menu = await generateAISpamSubmenu();
+    const menu = await generateAISpamSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4659,7 +5391,7 @@ async function handleAdminCallback(callbackQuery) {
 
   // 主菜单 - 进入子菜单
   if (data === 'submenu_verify') {
-    const menu = await generateVerifySubmenu();
+    const menu = await generateVerifySubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4671,7 +5403,7 @@ async function handleAdminCallback(callbackQuery) {
   }
 
   if (data === 'submenu_spam') {
-    const menu = await generateSpamFilterSubmenu();
+    const menu = await generateSpamFilterSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4684,7 +5416,7 @@ async function handleAdminCallback(callbackQuery) {
 
   // 关键词管理 - 进入子菜单
   if (data === 'manage_keywords') {
-    const menu = await generateKeywordManagementSubmenu();
+    const menu = await generateKeywordManagementSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4699,22 +5431,22 @@ async function handleAdminCallback(callbackQuery) {
   if (data === 'view_all_keywords') {
     const rules = await getSpamFilterRules();
     const allKeywords = [
-      '=== 拦截关键词 ===',
+      t(lang, 'kw_section_block'),
       ...(rules.keywords || []),
       '',
-      '=== 放行关键词 ===',
+      t(lang, 'kw_section_allow'),
       ...(rules.allowKeywords || []),
       '',
-      '=== 拦截正则 ===',
+      t(lang, 'kw_section_block_re'),
       ...(rules.regexes || []),
       '',
-      '=== 放行正则 ===',
+      t(lang, 'kw_section_allow_re'),
       ...(rules.allowRegexes || [])
     ].join('\n');
 
     await requestTelegram('sendMessage', {
       chat_id: chatId,
-      text: `<b>完整规则列表:</b>\n<pre>${escapeHtml(allKeywords)}</pre>`,
+      text: `${t(lang, 'kw_list_title')}\n<pre>${escapeHtml(allKeywords)}</pre>`,
       parse_mode: 'HTML'
     });
 
@@ -4728,7 +5460,7 @@ async function handleAdminCallback(callbackQuery) {
     rules.regexes = [];
     await setSpamFilterRules(rules);
 
-    const menu = await generateKeywordManagementSubmenu();
+    const menu = await generateKeywordManagementSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4739,13 +5471,13 @@ async function handleAdminCallback(callbackQuery) {
 
     return requestTelegram('answerCallbackQuery', {
       callback_query_id: callbackQuery.id,
-      text: '✅ 已清空所有拦截关键词和正则'
+      text: t(lang, 'toast_keywords_cleared')
     });
   }
 
   // 关键词管理 - 返回过滤设置
   if (data === 'back_to_spam_filter') {
-    const menu = await generateSpamFilterSubmenu();
+    const menu = await generateSpamFilterSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4757,7 +5489,7 @@ async function handleAdminCallback(callbackQuery) {
   }
 
   if (data === 'submenu_ai') {
-    const menu = await generateAISpamSubmenu();
+    const menu = await generateAISpamSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4769,7 +5501,7 @@ async function handleAdminCallback(callbackQuery) {
   }
 
   if (data === 'submenu_spamtopic') {
-    const menu = await generateSpamTopicSubmenu();
+    const menu = await generateSpamTopicSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4781,7 +5513,7 @@ async function handleAdminCallback(callbackQuery) {
   }
 
   if (data === 'submenu_union') {
-    const menu = await generateUnionBanSubmenu();
+    const menu = await generateUnionBanSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4793,7 +5525,7 @@ async function handleAdminCallback(callbackQuery) {
   }
 
   if (data === 'submenu_welcome') {
-    const menu = await generateWelcomeSubmenu();
+    const menu = await generateWelcomeSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4805,7 +5537,7 @@ async function handleAdminCallback(callbackQuery) {
   }
 
   if (data === 'submenu_autoreply') {
-    const menu = await generateAutoreplySubmenu();
+    const menu = await generateAutoreplySubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4821,7 +5553,7 @@ async function handleAdminCallback(callbackQuery) {
     if (mode === FORWARD_MODES.TOPIC && !hasTopicForwardingPrerequisites()) {
       return requestTelegram('answerCallbackQuery', {
         callback_query_id: callbackQuery.id,
-        text: '⚠️ 请先在环境变量中配置 GROUP_ID 和 ENV_ADMIN_UID',
+        text: t(lang, 'toast_fwd_need_config'),
         show_alert: true
       });
     }
@@ -4831,14 +5563,14 @@ async function handleAdminCallback(callbackQuery) {
       if (!readiness.ok) {
         return requestTelegram('answerCallbackQuery', {
           callback_query_id: callbackQuery.id,
-          text: `Topic mode unavailable: ${describeTopicEnvIssue(readiness)}`,
+          text: t(lang, 'toast_fwd_topic_unavailable', { issue: describeTopicEnvIssue(readiness, lang) }),
           show_alert: true
         });
       }
     }
 
     const applied = await setForwardMode(mode === FORWARD_MODES.TOPIC ? FORWARD_MODES.TOPIC : FORWARD_MODES.DIRECT);
-    const menu = await generateForwardModeSubmenu();
+    const menu = await generateForwardModeSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4848,12 +5580,12 @@ async function handleAdminCallback(callbackQuery) {
     });
     return requestTelegram('answerCallbackQuery', {
       callback_query_id: callbackQuery.id,
-      text: applied === FORWARD_MODES.TOPIC ? '已切换到话题模式' : '已切换到私聊模式'
+      text: applied === FORWARD_MODES.TOPIC ? t(lang, 'toast_fwd_switched_topic') : t(lang, 'toast_fwd_switched_direct')
     });
   }
 
   if (data === 'submenu_forward') {
-    const menu = await generateForwardModeSubmenu();
+    const menu = await generateForwardModeSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4865,7 +5597,7 @@ async function handleAdminCallback(callbackQuery) {
   }
 
   if (data === 'submenu_stats') {
-    const menu = await generateStatsSubmenu();
+    const menu = await generateStatsSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4878,7 +5610,7 @@ async function handleAdminCallback(callbackQuery) {
 
   // 用户管理 - 进入子菜单
   if (data === 'submenu_users') {
-    const menu = await generateUsersSubmenu(1, 'all');
+    const menu = await generateUsersSubmenu(1, 'all', lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4894,7 +5626,7 @@ async function handleAdminCallback(callbackQuery) {
     const parts = data.split(':');
     const page = parseInt(parts[1]) || 1;
     const filter = parts[2] || 'all';
-    const menu = await generateUsersSubmenu(page, filter);
+    const menu = await generateUsersSubmenu(page, filter, lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4902,13 +5634,13 @@ async function handleAdminCallback(callbackQuery) {
       parse_mode: 'HTML',
       reply_markup: menu.reply_markup
     });
-    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `第 ${page} 页` });
+    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: t(lang, 'toast_page', { page }) });
   }
 
   // 用户管理 - 过滤切换
   if (data.startsWith('users_filter:')) {
     const filter = data.split(':')[1] || 'all';
-    const menu = await generateUsersSubmenu(1, filter);
+    const menu = await generateUsersSubmenu(1, filter, lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4916,8 +5648,8 @@ async function handleAdminCallback(callbackQuery) {
       parse_mode: 'HTML',
       reply_markup: menu.reply_markup
     });
-    const filterText = { all: '全部', whitelisted: '信任', blocked: '拉黑' }[filter];
-    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `已切换: ${filterText}` });
+    const filterText = { all: t(lang, 'filter_all_short'), whitelisted: t(lang, 'filter_whitelisted_short'), blocked: t(lang, 'filter_blocked_short') }[filter];
+    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: t(lang, 'toast_filter_switched', { filter: filterText }) });
   }
 
   // 用户管理 - 刷新
@@ -4925,7 +5657,7 @@ async function handleAdminCallback(callbackQuery) {
     const parts = data.split(':');
     const page = parseInt(parts[1]) || 1;
     const filter = parts[2] || 'all';
-    const menu = await generateUsersSubmenu(page, filter);
+    const menu = await generateUsersSubmenu(page, filter, lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4933,7 +5665,7 @@ async function handleAdminCallback(callbackQuery) {
       parse_mode: 'HTML',
       reply_markup: menu.reply_markup
     });
-    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: '已刷新' });
+    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: t(lang, 'toast_refreshed') });
   }
 
   // 用户管理 - 进入用户操作子菜单
@@ -4942,7 +5674,7 @@ async function handleAdminCallback(callbackQuery) {
     const userId = parts[1];
     const page = parseInt(parts[2]) || 1;
     const filter = parts[3] || 'all';
-    const menu = await generateUserActionSubmenu(userId, page, filter);
+    const menu = await generateUserActionSubmenu(userId, page, filter, lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4960,7 +5692,7 @@ async function handleAdminCallback(callbackQuery) {
     const page = parseInt(parts[2]) || 1;
     const filter = parts[3] || 'all';
     await addToWhitelist(userId);
-    const menu = await generateUsersSubmenu(page, filter);
+    const menu = await generateUsersSubmenu(page, filter, lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4968,7 +5700,7 @@ async function handleAdminCallback(callbackQuery) {
       parse_mode: 'HTML',
       reply_markup: menu.reply_markup
     });
-    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `已信任用户 ${userId}` });
+    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: t(lang, 'toast_user_trusted', { userId }) });
   }
 
   // 用户管理 - 取消信任用户
@@ -4978,7 +5710,7 @@ async function handleAdminCallback(callbackQuery) {
     const page = parseInt(parts[2]) || 1;
     const filter = parts[3] || 'all';
     await removeFromWhitelist(userId);
-    const menu = await generateUsersSubmenu(page, filter);
+    const menu = await generateUsersSubmenu(page, filter, lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -4986,7 +5718,7 @@ async function handleAdminCallback(callbackQuery) {
       parse_mode: 'HTML',
       reply_markup: menu.reply_markup
     });
-    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `已取消信任用户 ${userId}` });
+    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: t(lang, 'toast_user_untrusted', { userId }) });
   }
 
   // 用户管理 - 拉黑用户
@@ -4998,7 +5730,7 @@ async function handleAdminCallback(callbackQuery) {
     await KV.put('blocked-' + userId, 'true');
     await invalidateBlockedCache(userId);
     await removeVerifiedUser(userId);
-    const menu = await generateUsersSubmenu(page, filter);
+    const menu = await generateUsersSubmenu(page, filter, lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -5006,7 +5738,7 @@ async function handleAdminCallback(callbackQuery) {
       parse_mode: 'HTML',
       reply_markup: menu.reply_markup
     });
-    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `已拉黑用户 ${userId}` });
+    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: t(lang, 'toast_user_blocked', { userId }) });
   }
 
   // 用户管理 - 解封用户
@@ -5017,7 +5749,7 @@ async function handleAdminCallback(callbackQuery) {
     const filter = parts[3] || 'all';
     await KV.delete('blocked-' + userId);
     await invalidateBlockedCache(userId);
-    const menu = await generateUsersSubmenu(page, filter);
+    const menu = await generateUsersSubmenu(page, filter, lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -5025,7 +5757,7 @@ async function handleAdminCallback(callbackQuery) {
       parse_mode: 'HTML',
       reply_markup: menu.reply_markup
     });
-    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: `已解封用户 ${userId}` });
+    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: t(lang, 'toast_user_unblocked', { userId }) });
   }
 
   // 垃圾过滤 - 切换状态
@@ -5033,7 +5765,7 @@ async function handleAdminCallback(callbackQuery) {
     const isEnabled = await getSpamFilterEnabled();
     await setSpamFilterEnabled(!isEnabled);
 
-    const menu = await generateSpamFilterSubmenu();
+    const menu = await generateSpamFilterSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -5043,7 +5775,7 @@ async function handleAdminCallback(callbackQuery) {
     });
     return requestTelegram('answerCallbackQuery', {
       callback_query_id: callbackQuery.id,
-      text: isEnabled ? '垃圾过滤已关闭' : '垃圾过滤已开启'
+      text: isEnabled ? t(lang, 'toast_spam_off') : t(lang, 'toast_spam_on')
     });
   }
 
@@ -5051,7 +5783,7 @@ async function handleAdminCallback(callbackQuery) {
   if (data === 'reset_spam_rules') {
     await resetSpamFilterRules();
 
-    const menu = await generateSpamFilterSubmenu();
+    const menu = await generateSpamFilterSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -5061,7 +5793,7 @@ async function handleAdminCallback(callbackQuery) {
     });
     return requestTelegram('answerCallbackQuery', {
       callback_query_id: callbackQuery.id,
-      text: '已重置为默认规则'
+      text: t(lang, 'toast_rules_reset')
     });
   }
 
@@ -5073,7 +5805,7 @@ async function handleAdminCallback(callbackQuery) {
       confidenceThreshold: aiConfig.confidenceThreshold || 0.7
     });
 
-    const menu = await generateAISpamSubmenu();
+    const menu = await generateAISpamSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -5083,7 +5815,7 @@ async function handleAdminCallback(callbackQuery) {
     });
     return requestTelegram('answerCallbackQuery', {
       callback_query_id: callbackQuery.id,
-      text: !aiConfig.enabled ? 'AI 检测已开启' : 'AI 检测已关闭'
+      text: !aiConfig.enabled ? t(lang, 'toast_ai_on') : t(lang, 'toast_ai_off')
     });
   }
 
@@ -5094,23 +5826,14 @@ async function handleAdminCallback(callbackQuery) {
     const used = CONFIG.AI_RATE_LIMIT_PER_HOUR - rateLimit.remaining;
     return requestTelegram('answerCallbackQuery', {
       callback_query_id: callbackQuery.id,
-      text: `📊 AI 使用统计\n本小时已用: ${used}/${CONFIG.AI_RATE_LIMIT_PER_HOUR}\n剩余: ${rateLimit.remaining}\n重置: ${rateLimit.resetAfter || Math.ceil(3600 - (now % 3600000) / 1000)}秒后`,
+      text: t(lang, 'ai_stats_alert', { used, limit: CONFIG.AI_RATE_LIMIT_PER_HOUR, remaining: rateLimit.remaining, reset: rateLimit.resetAfter || Math.ceil(3600 - (now % 3600000) / 1000) }),
       show_alert: true
     });
   }
 
   // AI 检测 - 调整置信度
   if (data === 'ai_confidence') {
-    const text = `⚙️ <b>调整 AI 置信度</b>
-
-当前阈值：<code>${(await getAISpamDetectionConfig()).confidenceThreshold || 0.7}</code>
-
-请发送一个新数值（0.5 ~ 0.95）：
-• 越高越严格（减少误判）
-• 越低越宽松（减少漏判）
-• 建议范围：0.6 ~ 0.8
-
-发送 <code>/cancel</code> 取消`;
+    const text = t(lang, 'ai_confidence_prompt', { value: (await getAISpamDetectionConfig()).confidenceThreshold || 0.7 });
 
     await KV.put(`ai_confidence_wait:${chatId}`, '1', { expirationTtl: 120 });
     await requestTelegram('editMessageText', {
@@ -5118,11 +5841,11 @@ async function handleAdminCallback(callbackQuery) {
       message_id: messageId,
       text,
       parse_mode: 'HTML',
-      reply_markup: { inline_keyboard: [[{ text: '◀️ 返回 AI 菜单', callback_data: 'back_to_ai_menu' }]] }
+      reply_markup: { inline_keyboard: [[{ text: t(lang, 'btn_back_ai'), callback_data: 'back_to_ai_menu' }]] }
     });
     return requestTelegram('answerCallbackQuery', {
       callback_query_id: callbackQuery.id,
-      text: '请输入新的置信度阈值'
+      text: t(lang, 'toast_ai_confidence_ask')
     });
   }
 
@@ -5134,7 +5857,7 @@ async function handleAdminCallback(callbackQuery) {
       enabled: !config.enabled
     });
 
-    const menu = await generateSpamTopicSubmenu();
+    const menu = await generateSpamTopicSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -5144,7 +5867,7 @@ async function handleAdminCallback(callbackQuery) {
     });
     return requestTelegram('answerCallbackQuery', {
       callback_query_id: callbackQuery.id,
-      text: !config.enabled ? '垃圾话题已开启' : '垃圾话题已关闭'
+      text: !config.enabled ? t(lang, 'toast_st_on') : t(lang, 'toast_st_off')
     });
   }
 
@@ -5154,7 +5877,7 @@ async function handleAdminCallback(callbackQuery) {
     if (!groupId) {
       return requestTelegram('answerCallbackQuery', {
         callback_query_id: callbackQuery.id,
-        text: '❌ 未配置群组 ID',
+        text: t(lang, 'toast_no_group'),
         show_alert: true
       });
     }
@@ -5163,19 +5886,14 @@ async function handleAdminCallback(callbackQuery) {
     const config = await getSpamTopicConfig();
     if (config.topicId) {
       // 提供强制重新创建的选项
-      const text = `⚠️ <b>垃圾话题已存在</b>
+      const text = `${t(lang, 'st_exists_title')}
 
-当前话题 ID: <code>${config.topicId}</code>
-
-<b>选项:</b>
-• 如果话题已被删除，请点击"强制重新创建"
-• 如果想使用新话题，请先删除旧话题或手动指定新 ID
-• 如果话题正常，请直接使用现有话题`;
+${t(lang, 'st_exists_body', { id: config.topicId })}`;
 
       const keyboard = {
         inline_keyboard: [
-          [{ text: '🔄 强制重新创建', callback_data: 'force_create_spam_topic' }],
-          [{ text: '❌ 取消', callback_data: 'back_to_spamtopic_menu' }]
+          [{ text: t(lang, 'btn_force_recreate'), callback_data: 'force_create_spam_topic' }],
+          [{ text: t(lang, 'btn_cancel'), callback_data: 'back_to_spamtopic_menu' }]
         ]
       };
 
@@ -5189,7 +5907,7 @@ async function handleAdminCallback(callbackQuery) {
 
       return requestTelegram('answerCallbackQuery', {
         callback_query_id: callbackQuery.id,
-        text: '垃圾话题已存在'
+        text: t(lang, 'toast_st_exists')
       });
     }
 
@@ -5200,7 +5918,7 @@ async function handleAdminCallback(callbackQuery) {
         topicId: topicId
       });
 
-      const menu = await generateSpamTopicSubmenu();
+      const menu = await generateSpamTopicSubmenu(lang);
       await requestTelegram('editMessageText', {
         chat_id: chatId,
         message_id: messageId,
@@ -5210,12 +5928,12 @@ async function handleAdminCallback(callbackQuery) {
       });
       return requestTelegram('answerCallbackQuery', {
         callback_query_id: callbackQuery.id,
-        text: `✅ 话题已创建，ID: ${topicId}`
+        text: t(lang, 'toast_st_created', { id: topicId })
       });
     } else {
       return requestTelegram('answerCallbackQuery', {
         callback_query_id: callbackQuery.id,
-        text: '❌ 创建话题失败，请检查机器人是否为群组管理员',
+        text: t(lang, 'toast_st_create_failed'),
         show_alert: true
       });
     }
@@ -5227,7 +5945,7 @@ async function handleAdminCallback(callbackQuery) {
     if (!groupId) {
       return requestTelegram('answerCallbackQuery', {
         callback_query_id: callbackQuery.id,
-        text: '❌ 未配置群组 ID',
+        text: t(lang, 'toast_no_group'),
         show_alert: true
       });
     }
@@ -5241,7 +5959,7 @@ async function handleAdminCallback(callbackQuery) {
         topicId: topicId
       });
 
-      const menu = await generateSpamTopicSubmenu();
+      const menu = await generateSpamTopicSubmenu(lang);
       await requestTelegram('editMessageText', {
         chat_id: chatId,
         message_id: messageId,
@@ -5251,12 +5969,12 @@ async function handleAdminCallback(callbackQuery) {
       });
       return requestTelegram('answerCallbackQuery', {
         callback_query_id: callbackQuery.id,
-        text: `✅ 话题已重新创建，ID: ${topicId}`
+        text: t(lang, 'toast_st_recreated', { id: topicId })
       });
     } else {
       return requestTelegram('answerCallbackQuery', {
         callback_query_id: callbackQuery.id,
-        text: '❌ 创建话题失败，可能话题名称重复或机器人权限不足',
+        text: t(lang, 'toast_st_create_failed_detail'),
         show_alert: true
       });
     }
@@ -5264,7 +5982,7 @@ async function handleAdminCallback(callbackQuery) {
 
   // 返回垃圾话题菜单
   if (data === 'back_to_spamtopic_menu') {
-    const menu = await generateSpamTopicSubmenu();
+    const menu = await generateSpamTopicSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -5274,7 +5992,7 @@ async function handleAdminCallback(callbackQuery) {
     });
     return requestTelegram('answerCallbackQuery', {
       callback_query_id: callbackQuery.id,
-      text: '已返回垃圾话题菜单'
+      text: t(lang, 'toast_back_spamtopic')
     });
   }
 
@@ -5283,22 +6001,11 @@ async function handleAdminCallback(callbackQuery) {
     const config = await getSpamTopicConfig();
 
     // 提示用户输入话题 ID
-    const text = `⚙️ <b>配置垃圾话题 ID</b>
-
-当前话题 ID: <code>${config.topicId || '(未设置)'}</code>
-
-<b>使用方法:</b>
-1. 在群组中手动创建一个话题
-2. 复制话题 ID（可以通过转发话题中的消息获取）
-3. 发送话题 ID 完成配置
-
-<b>或者:</b>
-• 发送 "自动创建" 让机器人自动创建话题
-• 发送 "取消" 放弃配置`;
+    const text = t(lang, 'st_config_prompt', { id: config.topicId || t(lang, 'st_not_set') });
 
     const keyboard = {
       inline_keyboard: [
-        [{ text: '◀️ 返回垃圾话题菜单', callback_data: 'back_to_spamtopic_menu' }]
+        [{ text: t(lang, 'btn_back_spamtopic'), callback_data: 'back_to_spamtopic_menu' }]
       ]
     };
 
@@ -5320,7 +6027,7 @@ async function handleAdminCallback(callbackQuery) {
 
     return requestTelegram('answerCallbackQuery', {
       callback_query_id: callbackQuery.id,
-      text: '请发送话题 ID 或 "自动创建"'
+      text: t(lang, 'toast_st_config_ask')
     });
   }
 
@@ -5331,7 +6038,7 @@ async function handleAdminCallback(callbackQuery) {
     if (!config.topicId) {
       return requestTelegram('answerCallbackQuery', {
         callback_query_id: callbackQuery.id,
-        text: '❌ 未配置垃圾话题，请先创建或配置话题 ID',
+        text: t(lang, 'toast_st_no_topic'),
         show_alert: true
       });
     }
@@ -5339,35 +6046,31 @@ async function handleAdminCallback(callbackQuery) {
     if (!GROUP_ID) {
       return requestTelegram('answerCallbackQuery', {
         callback_query_id: callbackQuery.id,
-        text: '❌ 未配置群组 ID',
+        text: t(lang, 'toast_no_group'),
         show_alert: true
       });
     }
 
     // 发送跳转到垃圾话题的链接
     const topicLink = `https://t.me/c/${GROUP_ID.replace('-100', '')}/${config.topicId}`;
-    const text = `📊 <b>查看垃圾消息</b>
+    const statusOnOff = config.enabled ? t(lang, 'status_on_icon') : t(lang, 'status_off_icon');
+    const text = `${t(lang, 'st_view_title')}
 
-<b>垃圾话题 ID:</b> <code>${config.topicId}</code>
-<b>话题链接:</b> <a href="${topicLink}">点击跳转</a>
+${t(lang, 'st_view_topic_id', { id: config.topicId })}
+${t(lang, 'st_view_link')}<a href="${topicLink}">${t(lang, 'st_view_open_link')}</a>
 
-<b>统计信息:</b>
-• 垃圾话题功能：${config.enabled ? '🟢 已开启' : '🔴 已关闭'}
-• 管理员通知：${config.notifyAdmin ? '✅' : '❌'}
+${t(lang, 'st_view_stats_title')}
+• ${t(lang, 'st_view_enabled', { status: statusOnOff })}
+• ${t(lang, 'st_view_notify', { icon: config.notifyAdmin ? '✅' : '❌' })}
 
-<b>说明:</b>
-• 所有被标记为垃圾的消息会自动转发到垃圾话题
-• 您可以在话题中查看和恢复误判的消息
-• 恢复消息请回复该消息并发送 /restore
+${t(lang, 'st_view_desc')}
 
-<b>快捷操作:</b>
-• 点击话题链接直接跳转到 Telegram 话题
-• 返回菜单可重新查看`;
+${t(lang, 'st_view_actions')}`;
 
     const keyboard = {
       inline_keyboard: [
-        [{ text: '🔗 打开话题', url: topicLink }],
-        [{ text: '◀️ 返回垃圾话题菜单', callback_data: 'back_to_spamtopic_menu' }]
+        [{ text: t(lang, 'btn_open_topic'), url: topicLink }],
+        [{ text: t(lang, 'btn_back_spamtopic'), callback_data: 'back_to_spamtopic_menu' }]
       ]
     };
 
@@ -5381,7 +6084,7 @@ async function handleAdminCallback(callbackQuery) {
 
     return requestTelegram('answerCallbackQuery', {
       callback_query_id: callbackQuery.id,
-      text: '已显示垃圾话题信息'
+      text: t(lang, 'toast_st_view_shown')
     });
   }
 
@@ -5392,7 +6095,7 @@ async function handleAdminCallback(callbackQuery) {
     const newVal = isEnabled ? '0' : '1';
     await setConfig(CONFIG_KEYS.UNION_BAN, newVal);
 
-    const menu = await generateUnionBanSubmenu();
+    const menu = await generateUnionBanSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -5402,13 +6105,13 @@ async function handleAdminCallback(callbackQuery) {
     });
     return requestTelegram('answerCallbackQuery', {
       callback_query_id: callbackQuery.id,
-      text: isEnabled ? '联合封禁已关闭' : '联合封禁已开启'
+      text: isEnabled ? t(lang, 'toast_union_off') : t(lang, 'toast_union_on')
     });
   }
 
   // 刷新子菜单
   if (data === 'refresh_welcome') {
-    const menu = await generateWelcomeSubmenu();
+    const menu = await generateWelcomeSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -5416,11 +6119,11 @@ async function handleAdminCallback(callbackQuery) {
       parse_mode: 'HTML',
       reply_markup: menu.reply_markup
     });
-    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: '已刷新' });
+    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: t(lang, 'toast_refreshed') });
   }
 
   if (data === 'refresh_autoreply') {
-    const menu = await generateAutoreplySubmenu();
+    const menu = await generateAutoreplySubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -5428,11 +6131,11 @@ async function handleAdminCallback(callbackQuery) {
       parse_mode: 'HTML',
       reply_markup: menu.reply_markup
     });
-    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: '已刷新' });
+    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: t(lang, 'toast_refreshed') });
   }
 
   if (data === 'refresh_stats') {
-    const menu = await generateStatsSubmenu();
+    const menu = await generateStatsSubmenu(lang);
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -5440,7 +6143,7 @@ async function handleAdminCallback(callbackQuery) {
       parse_mode: 'HTML',
       reply_markup: menu.reply_markup
     });
-    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: '已刷新' });
+    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: t(lang, 'toast_refreshed') });
   }
 
   // 广播控制按钮
@@ -5452,30 +6155,30 @@ async function handleAdminCallback(callbackQuery) {
       await requestTelegram('editMessageText', {
         chat_id: chatId,
         message_id: messageId,
-        text: '❌ 广播消息已过期或被取消',
+        text: t(lang, 'broadcast_expired_text'),
         parse_mode: 'HTML'
       });
-      return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: '广播已过期' });
+      return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: t(lang, 'toast_bc_expired') });
     }
 
     // 先回复按钮，避免超时
-    await requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: '正在发送...' });
+    await requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: t(lang, 'toast_bc_sending') });
 
     const result = await sendBroadcastBatch(broadcastMsg, offset, 500);
     const statusIcon = result.timedOut ? '⚠️' : '✅';
-    const statusText = result.timedOut ? '部分完成（超时）' : '完成';
+    const statusText = result.timedOut ? t(lang, 'broadcast_title_partial') : t(lang, 'broadcast_title_done');
 
     // 构建按钮
     const inlineKeyboard = [];
     if (result.hasMore) {
-      inlineKeyboard.push([{ text: '▶️ 继续发送', callback_data: `bcontinue:${result.nextOffset}` }]);
+      inlineKeyboard.push([{ text: t(lang, 'btn_bc_continue'), callback_data: `bcontinue:${result.nextOffset}` }]);
     }
-    inlineKeyboard.push([{ text: '❌ 取消广播', callback_data: 'bcancel' }]);
+    inlineKeyboard.push([{ text: t(lang, 'btn_bc_cancel'), callback_data: 'bcancel' }]);
 
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
-      text: `${statusIcon} <b>广播${statusText}</b>\n\n✅ 已发送：${result.sent}/${result.total}\n❌ 失败：${result.failed}${result.skipped > 0 ? `\n⏭️ 跳过（封禁）：${result.skipped}` : ''}`,
+      text: `${statusIcon} <b>${statusText}</b>\n\n${t(lang, 'broadcast_sent_line', { sent: result.sent, total: result.total })}\n${t(lang, 'broadcast_failed_line', { failed: result.failed })}${result.skipped > 0 ? `\n${t(lang, 'broadcast_skipped_line', { skipped: result.skipped })}` : ''}`,
       parse_mode: 'HTML',
       reply_markup: { inline_keyboard: inlineKeyboard }
     });
@@ -5487,10 +6190,10 @@ async function handleAdminCallback(callbackQuery) {
     await requestTelegram('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
-      text: '✅ 已取消广播',
+      text: t(lang, 'broadcast_cancelled_text'),
       parse_mode: 'HTML'
     });
-    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: '已取消' });
+    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: t(lang, 'toast_cancelled') });
   }
 }
 
@@ -5507,6 +6210,7 @@ async function handleAdminMessage(message) {
   const contextChatId = message.chat?.id ? String(message.chat.id) : null;
   const senderId = message.from ? String(message.from.id) : null;
   const adminChatId = senderId || ADMIN_UID || contextChatId;
+  const lang = await getUserLang(adminChatId);
   const replyChatId = reply ? (reply.chat?.id ? String(reply.chat.id) : (contextChatId || adminChatId)) : null;
 
   // 【话题模式支持】检测是否在话题中发送消息
@@ -5547,10 +6251,10 @@ async function handleAdminMessage(message) {
     const replyTarget = getReplyTarget();
     await KV.delete(aiConfidenceWaitKey);
 
-    if (text.toLowerCase() === '/cancel' || text.toLowerCase() === '取消') {
+    if (text.toLowerCase() === '/cancel' || text.toLowerCase() === 'cancel' || text.toLowerCase() === '取消') {
       return sendMessage({
         ...replyTarget,
-        text: '❌ 已取消调整置信度'
+        text: t(lang, 'ai_confidence_cancelled')
       });
     }
 
@@ -5558,7 +6262,7 @@ async function handleAdminMessage(message) {
     if (isNaN(newThreshold) || newThreshold < 0.5 || newThreshold > 0.95) {
       return sendMessage({
         ...replyTarget,
-        text: '⚠️ 请输入有效的数值（0.5 ~ 0.95），例如：0.75'
+        text: t(lang, 'ai_confidence_invalid')
       });
     }
 
@@ -5570,7 +6274,7 @@ async function handleAdminMessage(message) {
 
     return sendMessage({
       ...replyTarget,
-      text: `✅ AI 置信度已更新为 <code>${newThreshold}</code>\n\n• 越高越严格（减少误判）\n• 越低越宽松（减少漏判）`,
+      text: t(lang, 'ai_confidence_updated', { value: newThreshold }),
       parse_mode: 'HTML'
     });
   }
@@ -5597,9 +6301,9 @@ async function handleAdminMessage(message) {
       }
     }
 
-    if (text.toLowerCase() === '取消') {
+    if (text.toLowerCase() === '取消' || text.toLowerCase() === 'cancel') {
       if (lastMenuId) {
-        const menu = await generateSpamTopicSubmenu();
+        const menu = await generateSpamTopicSubmenu(lang);
         await requestTelegram('editMessageText', {
           chat_id: lastChatId,
           message_id: lastMenuId,
@@ -5610,11 +6314,11 @@ async function handleAdminMessage(message) {
       }
       return sendMessage({
         ...replyTarget,
-        text: '❌ 已取消配置垃圾话题 ID'
+        text: t(lang, 'st_config_cancelled')
       });
     }
 
-    if (text.toLowerCase() === '自动创建') {
+    if (text.toLowerCase() === '自动创建' || text.toLowerCase() === 'auto create') {
       const topicId = await createSpamTopic(GROUP_ID);
       if (topicId) {
         const config = await getSpamTopicConfig();
@@ -5624,7 +6328,7 @@ async function handleAdminMessage(message) {
         });
 
         if (lastMenuId) {
-          const menu = await generateSpamTopicSubmenu();
+          const menu = await generateSpamTopicSubmenu(lang);
           await requestTelegram('editMessageText', {
             chat_id: lastChatId,
             message_id: lastMenuId,
@@ -5636,13 +6340,13 @@ async function handleAdminMessage(message) {
 
         return sendMessage({
           ...replyTarget,
-          text: `✅ 垃圾话题已自动创建，ID: <code>${topicId}</code>\n\n请在菜单中开启垃圾话题功能`,
+          text: t(lang, 'st_auto_created', { id: topicId }),
           parse_mode: 'HTML'
         });
       } else {
         return sendMessage({
           ...replyTarget,
-          text: '❌ 自动创建失败，请检查机器人是否为群组管理员'
+          text: t(lang, 'st_auto_create_failed')
         });
       }
     }
@@ -5657,7 +6361,7 @@ async function handleAdminMessage(message) {
     if (!/^\d+$/.test(topicId)) {
       return sendMessage({
         ...replyTarget,
-        text: '❌ 无效的话题 ID，请输入纯数字或话题链接'
+        text: t(lang, 'st_invalid_id')
       });
     }
 
@@ -5669,7 +6373,7 @@ async function handleAdminMessage(message) {
 
     // 刷新菜单
     if (lastMenuId) {
-      const menu = await generateSpamTopicSubmenu();
+      const menu = await generateSpamTopicSubmenu(lang);
       await requestTelegram('editMessageText', {
         chat_id: lastChatId,
         message_id: lastMenuId,
@@ -5681,14 +6385,14 @@ async function handleAdminMessage(message) {
 
     return sendMessage({
       ...replyTarget,
-      text: `✅ 垃圾话题 ID 已设置：<code>${topicId}</code>\n\n请在菜单中开启垃圾话题功能`,
+      text: t(lang, 'st_id_set', { id: topicId }),
       parse_mode: 'HTML'
     });
   }
 
   // 【修复】检查是否以 / 开头但不是有效命令
   // 如果是无效命令且是回复消息，防止转发给用户
-  const validCommands = ['/help', '/menu', '/welcome', '/autoreply', '/ban', '/unban', '/reset', '/trust', '/untrust', '/broadcast', '/bcancel', '/restore', '/start'];
+  const validCommands = ['/help', '/menu', '/language', '/lang', '/welcome', '/autoreply', '/ban', '/unban', '/reset', '/trust', '/untrust', '/broadcast', '/bcancel', '/restore', '/start', '/cleanup', '/cachestats', '/clearcache', '/cancel'];
   const isValidCommand = validCommands.some(cmd => text === cmd || text.startsWith(cmd + ' '));
   const isCommandLike = text.startsWith('/') && text.length > 1;
 
@@ -5713,31 +6417,7 @@ async function handleAdminMessage(message) {
     const replyTarget = getReplyTarget();
     return sendMessage({
       ...replyTarget,
-      text: '🤖 <b>SafeRelay 管理面板</b>\n\n' +
-        '<b>常用指令：</b>\n' +
-        '/menu - 打开图形菜单\n' +
-        '/help - 显示帮助\n' +
-        '/broadcast - 广播消息\n' +
-        '/bcancel - 取消广播\n' +
-        '/cleanup - 清理失效话题\n' +
-        '/cachestats - 查看缓存统计\n' +
-        '/clearcache - 清空所有缓存\n\n' +
-        '<b>用户管理（回复消息或指定ID）：</b>\n' +
-        '/ban - 封禁用户\n' +
-        '/unban - 解封用户\n' +
-        '/reset - 重置验证\n' +
-        '/trust - 信任用户(白名单)\n' +
-        '/untrust - 取消信任\n\n' +
-        '<b>消息设置：</b>\n' +
-        '/welcome - 欢迎消息\n' +
-        '/autoreply - 自动回复\n\n' +
-        '<b>转发 / 系统：</b>\n' +
-        '/cleanup - 清理失效话题\n' +
-        '/cachestats - 查看缓存统计\n' +
-        '/clearcache - 清空缓存\n' +
-        '在 /menu → 转发模式 中切换私聊/话题\n\n' +
-        '<b>快捷操作：</b> 回复用户消息即可转发\n\n' +
-        '<i>验证: ' + getVerifyModeName(verifyMode) + ' | 过滤: ' + (spamFilterEnabled ? '开' : '关') + '</i>',
+      text: t(lang, 'help_title') + '\n\n' + t(lang, 'help_body') + '\n\n' + t(lang, 'help_footer', { verifyMode: getVerifyModeName(verifyMode, lang), filterStatus: spamFilterEnabled ? t(lang, 'on') : t(lang, 'off') }),
       parse_mode: 'HTML'
     });
   }
@@ -5746,8 +6426,20 @@ async function handleAdminMessage(message) {
 
   // 指令：/menu - 显示管理菜单
   if (text === '/menu') {
-    const menu = await generateMainMenu();
+    const menu = await generateMainMenu(lang);
     const replyTarget = getReplyTarget();
+    return sendMessage({
+      ...replyTarget,
+      text: menu.text,
+      parse_mode: 'HTML',
+      reply_markup: menu.reply_markup
+    });
+  }
+
+  // 指令：/language - 切换语言
+  if (text === '/language' || text === '/lang' || text.startsWith('/language ') || text.startsWith('/lang ')) {
+    const replyTarget = getReplyTarget();
+    const menu = await generateLanguageSubmenu(lang);
     return sendMessage({
       ...replyTarget,
       text: menu.text,
@@ -5764,13 +6456,13 @@ async function handleAdminMessage(message) {
       await setConfig(CONFIG_KEYS.WELCOME_MSG, '');
       return sendMessage({
         ...replyTarget,
-        text: '✅ 欢迎消息已删除（恢复默认）。'
+        text: t(lang, 'welcome_deleted')
       });
     }
     await setConfig(CONFIG_KEYS.WELCOME_MSG, content);
     return sendMessage({
       ...replyTarget,
-      text: '✅ 欢迎消息已设置。'
+      text: t(lang, 'welcome_set')
     });
   }
 
@@ -5782,13 +6474,13 @@ async function handleAdminMessage(message) {
       await setConfig(CONFIG_KEYS.AUTO_REPLY_MSG, '');
       return sendMessage({
         ...replyTarget,
-        text: '✅ 自动回复已关闭。'
+        text: t(lang, 'autoreply_off_done')
       });
     }
     await setConfig(CONFIG_KEYS.AUTO_REPLY_MSG, content);
     return sendMessage({
       ...replyTarget,
-      text: '✅ 自动回复已设置。'
+      text: t(lang, 'autoreply_set')
     });
   }
 
@@ -5802,9 +6494,9 @@ async function handleAdminMessage(message) {
       if (!rules.allowKeywords.includes(keyword)) {
         rules.allowKeywords.push(keyword);
         await setSpamFilterRules(rules);
-        return sendMessage({ ...replyTarget, text: `✅ 已添加放行关键词：<code>${escapeHtml(keyword)}</code>`, parse_mode: 'HTML' });
+        return sendMessage({ ...replyTarget, text: t(lang, 'kw_allow_added', { keyword: escapeHtml(keyword) }), parse_mode: 'HTML' });
       }
-      return sendMessage({ ...replyTarget, text: '⚠️ 该放行关键词已存在。' });
+      return sendMessage({ ...replyTarget, text: t(lang, 'kw_already_exists') });
     }
   }
 
@@ -5819,9 +6511,9 @@ async function handleAdminMessage(message) {
         new RegExp(regex, 'i'); // 验证正则有效性
         rules.regexes.push(regex);
         await setSpamFilterRules(rules);
-        return sendMessage({ ...replyTarget, text: `✅ 已添加正则规则：<code>${escapeHtml(regex)}</code>`, parse_mode: 'HTML' });
+        return sendMessage({ ...replyTarget, text: t(lang, 'kw_regex_added', { regex: escapeHtml(regex) }), parse_mode: 'HTML' });
       } catch (e) {
-        return sendMessage({ ...replyTarget, text: '❌ 正则表达式无效。' });
+        return sendMessage({ ...replyTarget, text: t(lang, 'kw_regex_invalid') });
       }
     }
   }
@@ -5836,9 +6528,9 @@ async function handleAdminMessage(message) {
       if (index > -1) {
         rules.keywords.splice(index, 1);
         await setSpamFilterRules(rules);
-        return sendMessage({ ...replyTarget, text: `✅ 已删除拦截关键词：<code>${escapeHtml(keyword)}</code>`, parse_mode: 'HTML' });
+        return sendMessage({ ...replyTarget, text: t(lang, 'kw_block_deleted', { keyword: escapeHtml(keyword) }), parse_mode: 'HTML' });
       }
-      return sendMessage({ ...replyTarget, text: '⚠️ 未找到该拦截关键词。' });
+      return sendMessage({ ...replyTarget, text: t(lang, 'kw_block_not_found') });
     }
   }
 
@@ -5852,17 +6544,17 @@ async function handleAdminMessage(message) {
       if (index > -1) {
         rules.allowKeywords.splice(index, 1);
         await setSpamFilterRules(rules);
-        return sendMessage({ ...replyTarget, text: `✅ 已删除放行关键词：<code>${escapeHtml(keyword)}</code>`, parse_mode: 'HTML' });
+        return sendMessage({ ...replyTarget, text: t(lang, 'kw_allow_deleted', { keyword: escapeHtml(keyword) }), parse_mode: 'HTML' });
       }
-      return sendMessage({ ...replyTarget, text: '⚠️ 未找到该放行关键词。' });
+      return sendMessage({ ...replyTarget, text: t(lang, 'kw_allow_not_found') });
     }
   }
 
   // 关键词管理 - 清空默认规则
-  if (text === '清空默认') {
+  if (text === '清空默认' || text.toLowerCase() === 'clear defaults') {
     const replyTarget = getReplyTarget();
     await resetSpamFilterRules();
-    return sendMessage({ ...replyTarget, text: '✅ 已重置为默认规则。' });
+    return sendMessage({ ...replyTarget, text: t(lang, 'kw_rules_reset_done') });
   }
 
   // 链接数量设置
@@ -5873,9 +6565,9 @@ async function handleAdminMessage(message) {
       const rules = await getSpamFilterRules();
       rules.maxLinks = num;
       await setSpamFilterRules(rules);
-      return sendMessage({ ...replyTarget, text: `✅ 链接限制已设置为：${num}` });
+      return sendMessage({ ...replyTarget, text: t(lang, 'max_links_set', { count: num }) });
     }
-    return sendMessage({ ...replyTarget, text: '⚠️ 请输入有效的数字。' });
+    return sendMessage({ ...replyTarget, text: t(lang, 'invalid_number') });
   }
 
   // 普通文本 - 添加为拦截关键词（如果不是命令）
@@ -5887,7 +6579,7 @@ async function handleAdminMessage(message) {
       // 在用户话题中发送文本，不添加关键词，提示用户
       return sendMessage({
         ...replyTarget,
-        text: 'ℹ️ 关键词管理只能在 General 话题或私聊中进行。\n\n当前在用户话题中，消息将转发给该用户。'
+        text: t(lang, 'kw_manage_general_only')
       });
     }
 
@@ -5899,7 +6591,7 @@ async function handleAdminMessage(message) {
     if (!rules.keywords.includes(text)) {
       rules.keywords.push(text);
       await setSpamFilterRules(rules);
-      return sendMessage({ ...replyTarget, text: `✅ 已添加拦截关键词：<code>${escapeHtml(text)}</code>\n发送 del:${escapeHtml(text)} 删除`, parse_mode: 'HTML' });
+      return sendMessage({ ...replyTarget, text: t(lang, 'kw_added', { keyword: escapeHtml(text) }), parse_mode: 'HTML' });
     }
   }
 
@@ -5911,9 +6603,9 @@ async function handleAdminMessage(message) {
       await KV.put('blocked-' + targetId, 'true');
       await invalidateBlockedCache(targetId);
       await removeVerifiedUser(targetId); // 从已验证列表移除
-      return sendMessage({ ...replyTarget, text: `🚫 用户 <code>${targetId}</code> 已被封禁。`, parse_mode: 'HTML' });
+      return sendMessage({ ...replyTarget, text: t(lang, 'ban_success', { id: targetId }), parse_mode: 'HTML' });
     } else {
-      return sendMessage({ ...replyTarget, text: '⚠️ 格式错误。\n请回复用户消息发送 /ban\n或发送 /ban 123456 (必须是数字 ID)' });
+      return sendMessage({ ...replyTarget, text: t(lang, 'ban_usage') });
     }
   }
 
@@ -5924,9 +6616,9 @@ async function handleAdminMessage(message) {
     if (targetId) {
       await KV.delete('blocked-' + targetId);
       await invalidateBlockedCache(targetId);
-      return sendMessage({ ...replyTarget, text: `✅ 用户 <code>${targetId}</code> 已解封。`, parse_mode: 'HTML' });
+      return sendMessage({ ...replyTarget, text: t(lang, 'unban_success', { id: targetId }), parse_mode: 'HTML' });
     } else {
-      return sendMessage({ ...replyTarget, text: '⚠️ 格式错误。\n请回复用户消息发送 /unban\n或发送 /unban 123456 (必须是数字 ID)' });
+      return sendMessage({ ...replyTarget, text: t(lang, 'unban_usage') });
     }
   }
 
@@ -5940,7 +6632,7 @@ async function handleAdminMessage(message) {
       if (isWhite) {
         return sendMessage({
           ...replyTarget,
-          text: `⚠️ 用户 <code>${targetId}</code> 在白名单中，无需验证即可发送消息。\n\n如需限制该用户，请先使用 /delwhite <code>${targetId}</code> 删除白名单。`,
+          text: t(lang, 'reset_whitelist_warning', { id: targetId }),
           parse_mode: 'HTML'
         });
       }
@@ -5948,9 +6640,9 @@ async function handleAdminMessage(message) {
       await KV.delete('verified-' + targetId);
       await invalidateCache('verified-' + targetId);
       await removeVerifiedUser(targetId); // 从已验证列表移除
-      return sendMessage({ ...replyTarget, text: `🔄 用户 <code>${targetId}</code> 验证状态已取消。`, parse_mode: 'HTML' });
+      return sendMessage({ ...replyTarget, text: t(lang, 'reset_success', { id: targetId }), parse_mode: 'HTML' });
     } else {
-      return sendMessage({ ...replyTarget, text: '⚠️ 格式错误。\n请回复用户消息发送 /reset\n或发送 /reset 123456 (必须是数字 ID)' });
+      return sendMessage({ ...replyTarget, text: t(lang, 'reset_usage') });
     }
   }
 
@@ -5961,7 +6653,7 @@ async function handleAdminMessage(message) {
     if (!broadcastMsg) {
       return sendMessage({
         ...replyTarget,
-        text: '⚠️ 格式错误。\n用法：/broadcast 消息内容\n\n支持 HTML 格式：\n<b>粗体</b> <i>斜体</i> <code>代码</code>',
+        text: t(lang, 'broadcast_usage'),
         parse_mode: 'HTML'
       });
     }
@@ -5972,7 +6664,7 @@ async function handleAdminMessage(message) {
       const remainingHours = Math.ceil(rateLimit.retryAfter / 3600);
       return sendMessage({
         ...replyTarget,
-        text: `⏳ 广播冷却中，请 ${remainingHours} 小时后再试。\n\n限额：${rateLimit.limit} 次/24 小时`
+        text: t(lang, 'broadcast_cooldown_limit', { hours: remainingHours, limit: rateLimit.limit })
       });
     }
 
@@ -5988,7 +6680,7 @@ async function handleAdminMessage(message) {
         const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
         return sendMessage({
           ...replyTarget,
-          text: `⏳ 广播冷却中，请 ${remainingHours} 小时后再试。`
+          text: t(lang, 'broadcast_cooldown', { hours: remainingHours })
         });
       }
     }
@@ -6001,18 +6693,18 @@ async function handleAdminMessage(message) {
     // 发送第一批（500人）
     const result = await sendBroadcastBatch(broadcastMsg, 0, 500);
     const statusIcon = result.timedOut ? '⚠️' : '✅';
-    const statusText = result.timedOut ? '部分完成（超时）' : '完成';
+    const statusText = result.timedOut ? t(lang, 'broadcast_title_partial') : t(lang, 'broadcast_title_done');
 
     // 构建按钮
     const inlineKeyboard = [];
     if (result.hasMore) {
-      inlineKeyboard.push([{ text: '▶️ 继续发送', callback_data: `bcontinue:${result.nextOffset}` }]);
+      inlineKeyboard.push([{ text: t(lang, 'btn_bc_continue'), callback_data: `bcontinue:${result.nextOffset}` }]);
     }
-    inlineKeyboard.push([{ text: '❌ 取消广播', callback_data: 'bcancel' }]);
+    inlineKeyboard.push([{ text: t(lang, 'btn_bc_cancel'), callback_data: 'bcancel' }]);
 
     return sendMessage({
       ...replyTarget,
-      text: `${statusIcon} <b>广播${statusText}</b>\n\n✅ 已发送：${result.sent}/${result.total}\n❌ 失败：${result.failed}${result.skipped > 0 ? `\n⏭️ 跳过（封禁）：${result.skipped}` : ''}`,
+      text: `${statusIcon} <b>${statusText}</b>\n\n${t(lang, 'broadcast_sent_line', { sent: result.sent, total: result.total })}\n${t(lang, 'broadcast_failed_line', { failed: result.failed })}${result.skipped > 0 ? `\n${t(lang, 'broadcast_skipped_line', { skipped: result.skipped })}` : ''}`,
       parse_mode: 'HTML',
       reply_markup: { inline_keyboard: inlineKeyboard }
     });
@@ -6024,10 +6716,10 @@ async function handleAdminMessage(message) {
     const replyTarget = getReplyTarget();
     if (targetId) {
       await addToWhitelist(targetId);
-      return sendMessage({ ...replyTarget, text: `✅ 已信任用户 <code>${targetId}</code>`, parse_mode: 'HTML' });
+      return sendMessage({ ...replyTarget, text: t(lang, 'trust_success', { id: targetId }), parse_mode: 'HTML' });
     } else {
       // 如果没有指定 ID，显示当前白名单状态
-      return sendMessage({ ...replyTarget, text: '📋 请回复用户消息或发送 /trust 123456 来信任用户' });
+      return sendMessage({ ...replyTarget, text: t(lang, 'trust_hint') });
     }
   }
 
@@ -6037,9 +6729,9 @@ async function handleAdminMessage(message) {
     const replyTarget = getReplyTarget();
     if (targetId) {
       await removeFromWhitelist(targetId);
-      return sendMessage({ ...replyTarget, text: `✅ 已取消信任用户 <code>${targetId}</code>`, parse_mode: 'HTML' });
+      return sendMessage({ ...replyTarget, text: t(lang, 'untrust_success', { id: targetId }), parse_mode: 'HTML' });
     } else {
-      return sendMessage({ ...replyTarget, text: '📋 请回复用户消息或发送 /untrust 123456 来取消信任' });
+      return sendMessage({ ...replyTarget, text: t(lang, 'untrust_hint') });
     }
   }
 
@@ -6049,7 +6741,7 @@ async function handleAdminMessage(message) {
     await KV.delete(`broadcast_msg:${adminChatId}`);
     return sendMessage({
       ...replyTarget,
-      text: '✅ 已取消广播'
+      text: t(lang, 'bcancel_done')
     });
   }
 
@@ -6066,21 +6758,11 @@ async function handleAdminMessage(message) {
   if (text === '/cachestats') {
     const stats = getCacheStats();
     const replyTarget = getReplyTarget();
-    const text = `📊 <b>缓存统计信息</b>\n\n` +
-      `<b>L1 内存缓存：</b>\n` +
-      `  命中：${stats.l1.hits}\n` +
-      `  未命中：${stats.l1.misses}\n` +
-      `  命中率：${stats.l1.hitRate}\n` +
-      `  缓存大小：${stats.l1.size} 条目\n\n` +
-      `<b>L2 KV 缓存：</b>\n` +
-      `  命中：${stats.l2.hits}\n` +
-      `  未命中：${stats.l2.misses}\n` +
-      `  命中率：${stats.l2.hitRate}\n\n` +
-      `<i>提示：命中率越高，性能越好</i>`;
+    const statsText = t(lang, 'cache_stats_text', { l1Hits: stats.l1.hits, l1Misses: stats.l1.misses, l1Rate: stats.l1.hitRate, l1Size: stats.l1.size, l2Hits: stats.l2.hits, l2Misses: stats.l2.misses, l2Rate: stats.l2.hitRate });
 
     return sendMessage({
       ...replyTarget,
-      text: text,
+      text: statsText,
       parse_mode: 'HTML'
     });
   }
@@ -6091,7 +6773,7 @@ async function handleAdminMessage(message) {
     clearAllCache();
     return sendMessage({
       ...replyTarget,
-      text: '✅ 已清空所有缓存\n\nL1 内存缓存和统计信息已重置。\nL2 KV 缓存将在到期后自动清理。',
+      text: t(lang, 'clearcache_done'),
       parse_mode: 'HTML'
     });
   }
@@ -6105,7 +6787,7 @@ async function handleAdminMessage(message) {
     if (!spamTopicConfig.topicId || !(await isSpamTopicEnabled())) {
       return sendMessage({
         ...replyTarget,
-        text: '⚠️ 垃圾话题功能未启用，无法恢复消息。'
+        text: t(lang, 'restore_not_enabled')
       });
     }
 
@@ -6113,7 +6795,7 @@ async function handleAdminMessage(message) {
     if (replyChatIdStr !== GROUP_ID || !reply.message_thread_id || String(reply.message_thread_id) !== String(spamTopicConfig.topicId)) {
       return sendMessage({
         ...replyTarget,
-        text: '⚠️ 请回复垃圾话题中的消息来恢复。\n\n提示：只有垃圾话题中的消息才能被恢复。'
+        text: t(lang, 'restore_wrong_topic')
       });
     }
 
@@ -6124,25 +6806,25 @@ async function handleAdminMessage(message) {
       if (isTopicMode && targetThreadId) {
         await sendMessage({
           ...replyTarget,
-          text: `✅ 消息已恢复到用户话题\n\nUID: <code>${restoreResult.guestChatId}</code>\n话题 ID: <code>${targetThreadId}</code>`,
+          text: t(lang, 'restore_success_topic', { uid: restoreResult.guestChatId, topicId: targetThreadId }),
           parse_mode: 'HTML'
         });
       } else {
         await sendMessage({
           ...replyTarget,
-          text: `✅ 消息已恢复并发送给用户\n\nUID: <code>${restoreResult.guestChatId}</code>`,
+          text: t(lang, 'restore_success_dm', { uid: restoreResult.guestChatId }),
           parse_mode: 'HTML'
         });
       }
     } else if (restoreResult.reason === 'no_mapping') {
       await sendMessage({
         ...replyTarget,
-        text: '⚠️ 未找到消息映射关系，无法恢复。\n\n可能原因：消息映射已过期（超过48小时）或消息不是通过垃圾话题功能转发的。'
+        text: t(lang, 'restore_no_mapping')
       });
     } else {
       await sendMessage({
         ...replyTarget,
-        text: '❌ 恢复消息失败，请稍后重试。'
+        text: t(lang, 'restore_failed')
       });
     }
     return;
@@ -6157,7 +6839,7 @@ async function handleAdminMessage(message) {
     if (!isValidCommand) {
       return sendMessage({
         chat_id: contextChatId,
-        text: `⚠️ 无效命令 "${text.split(' ')[0]}"\n\n请发送 /help 查看所有可用指令。`,
+        text: t(lang, 'invalid_command_topic', { cmd: text.split(' ')[0] }),
         parse_mode: 'HTML',
         message_thread_id: message.message_thread_id
       });
@@ -6188,13 +6870,13 @@ async function handleAdminMessage(message) {
       guestChatId = await KV.get(scopedMessageMapKey) || await KV.get('msg-map-' + reply.message_id);
     }
     // 情况 3：回复垃圾过滤菜单消息
-    if (!guestChatId && reply.text && reply.text.includes('🗑 <b>垃圾消息过滤设置</b>')) {
+    if (!guestChatId && reply.text && (reply.text.includes('Spam Filter Settings') || reply.text.includes('垃圾消息过滤设置'))) {
       // 解析编辑内容
       const newRules = parseSpamRulesEdit(text);
       await setSpamFilterRules(newRules);
 
       // 刷新菜单
-      const menu = await generateSpamFilterSubmenu();
+      const menu = await generateSpamFilterSubmenu(lang);
       await requestTelegram('editMessageText', {
         chat_id: replyChatId || contextChatId || adminChatId,
         message_id: reply.message_id,
@@ -6205,7 +6887,7 @@ async function handleAdminMessage(message) {
 
       return sendMessage({
         ...(isInTopic ? { chat_id: contextChatId, message_thread_id: message.message_thread_id } : { chat_id: adminChatId }),
-        text: '✅ 垃圾过滤规则已更新'
+        text: t(lang, 'spam_rules_updated')
       });
     }
 
@@ -6217,7 +6899,7 @@ async function handleAdminMessage(message) {
     if (isCommandLike && !isValidCommand) {
       return sendMessage({
         ...(isInTopic ? { chat_id: contextChatId, message_thread_id: message.message_thread_id } : { chat_id: adminChatId }),
-        text: `⚠️ 无效命令 "${text.split(' ')[0]}"\n\n请检查命令拼写，或发送 /help 查看所有可用指令。`,
+        text: t(lang, 'invalid_command', { cmd: text.split(' ')[0] }),
         parse_mode: 'HTML'
       });
     }
@@ -6266,7 +6948,7 @@ async function handleAdminMessage(message) {
     } else {
       return sendMessage({
         ...(isInTopic ? { chat_id: contextChatId, message_thread_id: message.message_thread_id } : { chat_id: adminChatId }),
-        text: '⚠️ 未找到原用户映射，可能消息太旧或被清理了缓存。'
+        text: t(lang, 'no_mapping_old')
       });
     }
   } else {
@@ -6274,7 +6956,7 @@ async function handleAdminMessage(message) {
     const replyTarget = getReplyTarget();
     return sendMessage({
       ...replyTarget,
-      text: '🤖 请发送 /help 查看所有可用指令，或直接回复用户消息进行转发。',
+      text: t(lang, 'help_hint'),
       parse_mode: 'HTML'
     });
   }
@@ -6285,19 +6967,20 @@ async function handleCleanupCommand(message, options = {}, overrideChatId = null
   const { dryRun = false, cleanAll = false } = options;
   const adminChatId = overrideChatId || (message.chat?.id ? String(message.chat.id) : ADMIN_UID);
   const groupId = getEnv('GROUP_ID');
+  const lang = await getUserLang(adminChatId);
 
   if (!groupId) {
     return sendMessage({
       chat_id: adminChatId,
-      text: '⚠️ 未配置 GROUP_ID 环境变量\n\n话题清理功能仅在使用论坛群组时需要。\n请在 Cloudflare 环境变量中设置 GROUP_ID。'
+      text: t(lang, 'cleanup_no_group')
     });
   }
 
   // 发送开始通知
-  const startMsg = dryRun ? '🔍 <b>开始扫描失效话题（预览模式）</b>' : '🧹 <b>开始清理失效话题</b>';
+  const startMsg = dryRun ? t(lang, 'cleanup_scan_dry') : t(lang, 'cleanup_scan');
   const progressMsg = await sendMessage({
     chat_id: adminChatId,
-    text: `${startMsg}\n\n正在扫描用户数据...`,
+    text: `${startMsg}\n\n${t(lang, 'cleanup_scanning')}`,
     parse_mode: 'HTML'
   });
 
@@ -6374,7 +7057,7 @@ async function handleCleanupCommand(message, options = {}, overrideChatId = null
           await requestTelegram('editMessageText', {
             chat_id: adminChatId,
             message_id: progressMsg.result.message_id,
-            text: `${startMsg}\n\n进度：${i + 1}/${userKeys.length}\n已发现失效：${invalidCount}${!dryRun ? `\n已清理：${cleanedCount}` : ''}`,
+            text: `${startMsg}\n\n${t(lang, 'cleanup_progress', { done: i + 1, total: userKeys.length, invalid: invalidCount })}${!dryRun ? `\n${t(lang, 'cleanup_progress_cleaned', { cleaned: cleanedCount })}` : ''}`,
             parse_mode: 'HTML'
           });
         }
@@ -6392,13 +7075,13 @@ async function handleCleanupCommand(message, options = {}, overrideChatId = null
 
     // 更新最终结果
     const resultText = [
-      `✅ <b>清理完成</b>`,
+      t(lang, 'cleanup_done_title'),
       ``,
-      `📊 <b>统计信息：</b>`,
-      `• 总用户数：${userKeys.length}`,
-      `• 失效话题：${invalidCount}`,
-      !dryRun ? `• 已清理：${cleanedCount}` : `• 预览模式：未执行清理`,
-      errorCount > 0 ? `• 错误：${errorCount}` : null
+      t(lang, 'cleanup_stats_title'),
+      `• ${t(lang, 'cleanup_total_users', { count: userKeys.length })}`,
+      `• ${t(lang, 'cleanup_invalid_topics', { count: invalidCount })}`,
+      !dryRun ? `• ${t(lang, 'cleanup_cleaned', { count: cleanedCount })}` : `• ${t(lang, 'cleanup_preview_note')}`,
+      errorCount > 0 ? `• ${t(lang, 'cleanup_errors', { count: errorCount })}` : null
     ].filter(Boolean).join('\n');
 
     if (invalidCount > 0 && !dryRun) {
@@ -6408,12 +7091,12 @@ async function handleCleanupCommand(message, options = {}, overrideChatId = null
         .map(u => `• User ${u.userId}: Topic ${u.threadId}`)
         .join('\n');
 
-      const moreText = invalidUsers.length > detailLimit ? `\n... 还有 ${invalidUsers.length - detailLimit} 个` : '';
+      const moreText = invalidUsers.length > detailLimit ? `\n${t(lang, 'cleanup_more', { count: invalidUsers.length - detailLimit })}` : '';
 
       await requestTelegram('editMessageText', {
         chat_id: adminChatId,
         message_id: progressMsg.result.message_id,
-        text: `${resultText}\n\n<b>失效用户列表：</b>\n${details}${moreText}`,
+        text: `${resultText}\n\n${t(lang, 'cleanup_invalid_list_title')}\n${details}${moreText}`,
         parse_mode: 'HTML'
       });
     } else {
@@ -6438,7 +7121,7 @@ async function handleCleanupCommand(message, options = {}, overrideChatId = null
     await requestTelegram('editMessageText', {
       chat_id: adminChatId,
       message_id: progressMsg.result.message_id,
-      text: `❌ <b>清理失败</b>\n\n错误信息：${e.message}\n\n请检查日志或重试。`,
+      text: t(lang, 'cleanup_failed', { error: e.message }),
       parse_mode: 'HTML'
     });
   }
@@ -6448,6 +7131,7 @@ async function handleCleanupCommand(message, options = {}, overrideChatId = null
 async function handleVerification(message, chatId, origin) {
   // 获取当前验证模式
   const verifyMode = await getVerifyMode();
+  const lang = await getUserLang(chatId);
   const text = (message?.text || '').trim();
 
   // 【并发保护】暂存当前消息（如果有）
@@ -6459,7 +7143,7 @@ async function handleVerification(message, chatId, origin) {
     if (queue.length >= CONFIG.PENDING_MAX_MESSAGES) {
       await sendMessage({
         chat_id: chatId,
-        text: `📝 消息已暂存，完成验证后会自动发送（最多暂存${CONFIG.PENDING_MAX_MESSAGES}条）`
+        text: t(lang, 'verify_pending_queued', { max: CONFIG.PENDING_MAX_MESSAGES })
       });
     }
   }
@@ -6479,7 +7163,7 @@ async function handleVerification(message, chatId, origin) {
     if (!limitCheck.allowed) {
       return sendMessage({
         chat_id: chatId,
-        text: '⏳ 验证尝试过于频繁，请5分钟后再试。'
+        text: t(lang, 'verify_too_frequent')
       });
     }
 
@@ -6489,14 +7173,15 @@ async function handleVerification(message, chatId, origin) {
     // 获取自定义欢迎消息
     const welcomeMsg = await getConfig(CONFIG_KEYS.WELCOME_MSG);
     const verificationText = welcomeMsg
-      ? welcomeMsg + '\n\n🛡 请回答以下问题以继续对话：'
-      : '🛡 为了防止垃圾消息，请回答以下问题：';
+      ? welcomeMsg + '\n\n' + t(lang, 'verify_quiz_with_welcome')
+      : t(lang, 'verify_quiz_default');
+    const questionText = (question.q && (question.q[lang] || question.q.en)) || '';
 
     return sendMessage({
       chat_id: chatId,
-      text: `${verificationText}\n\n<b>${question.q}</b>`,
+      text: `${verificationText}\n\n<b>${escapeHtml(questionText)}</b>`,
       parse_mode: 'HTML',
-      reply_markup: generateQuizKeyboard(question)
+      reply_markup: generateQuizKeyboard(question, lang)
     });
   }
 
@@ -6511,11 +7196,11 @@ async function handleVerification(message, chatId, origin) {
   if (!session) {
     return sendMessage({
       chat_id: chatId,
-      text: '⚠️ 系统暂时无法创建验证会话，请稍后再试。'
+      text: t(lang, 'verify_session_failed')
     });
   }
 
-  const verifyUrl = `${origin}/verify?session=${encodeURIComponent(session.sessionId)}&sig=${encodeURIComponent(session.signature)}`;
+  const verifyUrl = `${origin}/verify?session=${encodeURIComponent(session.sessionId)}&sig=${encodeURIComponent(session.signature)}&lang=${encodeURIComponent(lang)}`;
 
   // 获取自定义欢迎消息
   const welcomeMsg = await getConfig(CONFIG_KEYS.WELCOME_MSG);
@@ -6523,12 +7208,12 @@ async function handleVerification(message, chatId, origin) {
 
   if (verifyMode === 'both') {
     verificationText = welcomeMsg
-      ? welcomeMsg + '\n\n🛡 请完成以下两步验证以继续对话：'
-      : '🛡 为了防止垃圾消息，请完成以下两步验证：';
+      ? welcomeMsg + '\n\n' + t(lang, 'verify_both_with_welcome')
+      : t(lang, 'verify_both_default');
   } else {
     verificationText = welcomeMsg
-      ? welcomeMsg + '\n\n🛡 请完成下方验证以继续对话：'
-      : '🛡 为了防止垃圾消息，请点击下方按钮完成人机验证：';
+      ? welcomeMsg + '\n\n' + t(lang, 'verify_turnstile_with_welcome')
+      : t(lang, 'verify_turnstile_default');
   }
 
   return sendMessage({
@@ -6536,7 +7221,7 @@ async function handleVerification(message, chatId, origin) {
     text: verificationText,
     reply_markup: {
       inline_keyboard: [[
-        { text: '🤖 点击进行人机验证', web_app: { url: verifyUrl } }
+        { text: t(lang, 'btn_verify_turnstile'), web_app: { url: verifyUrl } }
       ]]
     }
   });
@@ -6548,9 +7233,11 @@ function handleVerifyPage(request) {
   const url = new URL(request.url);
   const sessionId = url.searchParams.get('session');
   const sessionSignature = url.searchParams.get('sig');
+  const pageLang = normalizeLang(url.searchParams.get('lang')) || 'en';
+  const htmlLang = pageLang === 'zh' ? 'zh-CN' : 'en';
 
   if (!siteKey) {
-    return new Response('Turnstile 未配置', {
+    return new Response(t(pageLang, 'verify_not_configured'), {
       status: 503,
       headers: { 'content-type': 'text/plain;charset=UTF-8' }
     });
@@ -6563,27 +7250,27 @@ function handleVerifyPage(request) {
     });
   }
 
-  // 中文语言配置
-  const t = {
-    title: '人机验证 - SafeRelay',
-    heading: '安全验证',
-    subtitle: '请完成下方验证以继续对话',
-    success: '验证成功！',
-    successDesc: '请返回 Telegram 继续聊天',
-    error: '验证失败',
-    errorDesc: '请重试或刷新页面',
-    retry: '重新验证',
-    footer: '该界面由 SafeRelay 提供',
-    loading: '验证中...'
+  // 页面文案（语言来自 ?lang= 参数，默认英文）
+  const pageText = {
+    title: t(pageLang, 'verify_page_title'),
+    heading: t(pageLang, 'verify_page_heading'),
+    subtitle: t(pageLang, 'verify_page_subtitle'),
+    success: t(pageLang, 'verify_page_success'),
+    successDesc: t(pageLang, 'verify_page_success_desc'),
+    error: t(pageLang, 'verify_page_error'),
+    errorDesc: t(pageLang, 'verify_page_error_desc'),
+    retry: t(pageLang, 'verify_page_retry'),
+    footer: t(pageLang, 'verify_page_footer'),
+    loading: t(pageLang, 'verify_page_loading')
   };
 
   const html = `
   <!DOCTYPE html>
-  <html lang="zh-CN">
+  <html lang="${htmlLang}">
   <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${t.title}</title>
+      <title>${pageText.title}</title>
       <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
       <script src="https://telegram.org/js/telegram-web-app.js"></script>
       <script src="https://cdn.tailwindcss.com"></script>
@@ -6719,62 +7406,62 @@ function handleVerifyPage(request) {
   </head>
   <body class="theme-light min-h-screen flex items-center justify-center p-4 md:p-6">
       <div class="w-full max-w-md">
-          <!-- 主卡片 - Soft UI 风格 -->
+          <!-- Main card - Soft UI -->
           <div class="card rounded-3xl p-6 md:p-8 text-center transition-all duration-300">
-              <!-- 图标 -->
+              <!-- Icon -->
               <div class="icon-bg w-16 h-16 md:w-20 md:h-20 mx-auto mb-6 rounded-2xl flex items-center justify-center transition-all duration-300">
                   <svg class="icon-color w-8 h-8 md:w-10 md:h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
                   </svg>
               </div>
               
-              <!-- 标题 -->
-              <h1 class="text-primary text-xl md:text-2xl font-semibold mb-2 transition-colors duration-300">${t.heading}</h1>
-              <p class="text-secondary text-sm md:text-base mb-8 transition-colors duration-300">${t.subtitle}</p>
+              <!-- Title -->
+              <h1 class="text-primary text-xl md:text-2xl font-semibold mb-2 transition-colors duration-300">${pageText.heading}</h1>
+              <p class="text-secondary text-sm md:text-base mb-8 transition-colors duration-300">${pageText.subtitle}</p>
               
-              <!-- Turnstile 验证区域 -->
+              <!-- Turnstile widget -->
               <div id="verify-section" class="turnstile-container mb-6">
                   <div id="turnstile-widget" class="cf-turnstile" data-sitekey="${siteKey}" data-callback="onVerify" data-theme="auto"></div>
               </div>
               
-              <!-- 加载状态 -->
+              <!-- Loading state -->
               <div id="loading-msg" class="hidden mb-6">
                   <div class="inline-flex items-center gap-2 text-secondary">
                       <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      <span class="text-sm">${t.loading}</span>
+                      <span class="text-sm">${pageText.loading}</span>
                   </div>
               </div>
               
-              <!-- 成功消息 -->
+              <!-- Success message -->
               <div id="success-msg" class="hidden">
                   <div class="success-bg w-14 h-14 md:w-16 md:h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center transition-all duration-300">
                       <svg class="success-icon w-7 h-7 md:w-8 md:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                       </svg>
                   </div>
-                  <h2 class="text-primary text-lg md:text-xl font-semibold mb-2 transition-colors duration-300">${t.success}</h2>
-                  <p class="text-secondary text-sm md:text-base transition-colors duration-300">${t.successDesc}</p>
+                  <h2 class="text-primary text-lg md:text-xl font-semibold mb-2 transition-colors duration-300">${pageText.success}</h2>
+                  <p class="text-secondary text-sm md:text-base transition-colors duration-300">${pageText.successDesc}</p>
               </div>
               
-              <!-- 错误消息 -->
+              <!-- Error message -->
               <div id="error-msg" class="hidden mt-4">
                   <div class="error-bg rounded-2xl p-4 mb-4 transition-all duration-300">
-                      <p class="error-text text-sm font-medium">${t.error}</p>
-                      <p class="text-secondary text-xs mt-1">${t.errorDesc}</p>
+                      <p class="error-text text-sm font-medium">${pageText.error}</p>
+                      <p class="text-secondary text-xs mt-1">${pageText.errorDesc}</p>
                   </div>
-                  <!-- 重试按钮 -->
+                  <!-- Retry button -->
                   <button onclick="resetVerification()" class="btn-primary text-white font-medium px-6 py-3 rounded-2xl transition-all duration-200">
-                      ${t.retry}
+                      ${pageText.retry}
                   </button>
               </div>
           </div>
           
-          <!-- 底部信息 -->
+          <!-- Footer -->
           <div class="mt-6 text-center">
-              <p class="text-secondary text-xs transition-colors duration-300">${t.footer}</p>
+              <p class="text-secondary text-xs transition-colors duration-300">${pageText.footer}</p>
           </div>
       </div>
 
@@ -6803,7 +7490,7 @@ function handleVerifyPage(request) {
                   });
               }
           } catch (e) {
-              console.log('Telegram Web App 初始化失败:', e);
+              console.log('Telegram Web App init failed:', e);
               // 检测系统主题
               if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
                   applyTheme('dark');
@@ -6873,7 +7560,7 @@ function handleVerifyPage(request) {
                       };
                   }
               } catch (e) {
-                  console.log('获取用户信息失败:', e);
+                  console.log('Failed to read user info:', e);
               }
 
               fetch('/verify-callback', {
@@ -6894,7 +7581,7 @@ function handleVerifyPage(request) {
                                   tg.close();
                               }
                           } catch (e) {
-                              console.log('关闭窗口失败:', e);
+                              console.log('Failed to close window:', e);
                           }
                       }, 1500);
                   } else {
@@ -6902,7 +7589,7 @@ function handleVerifyPage(request) {
                   }
               })
               .catch(err => {
-                  console.error('验证失败:', err);
+                  console.error('Verification failed:', err);
                   showError();
               });
           }
@@ -6996,13 +7683,10 @@ async function handleVerifyCallback(request) {
     const pendingResult = await processPendingMessagesAfterVerification(uid);
     Logger.info('turnstile_verification_success', { userId: uid, pendingForwarded: pendingResult.forwarded });
 
-    let successMsg = `✅ 验证通过！
-
-如果重复验证请等待一分钟后再发送消息，以确保验证状态同步。`;
+    const guestLang = await getUserLang(uid);
+    let successMsg = t(guestLang, 'turnstile_success');
     if (pendingResult.forwarded > 0) {
-      successMsg = `✅ 验证通过！
-
-📩 刚才的 ${pendingResult.forwarded} 条消息已送达管理员。`;
+      successMsg = t(guestLang, 'turnstile_success_pending', { count: pendingResult.forwarded });
     }
     await sendMessage({
       chat_id: uid,
@@ -7021,19 +7705,20 @@ async function handleVerifyCallback(request) {
         usernameLine = `
 📎 @${escapeHtml(userInfo.username)}`;
       }
-      await Promise.all(ADMIN_ID_LIST.map(adminId => requestTelegram('sendMessage', {
-        chat_id: adminId,
-        text: `✅ <b>新用户验证通过</b>
-
-🆔 <code>${uid}</code> (${escapeHtml(displayName)})${usernameLine}`,
-        parse_mode: 'HTML',
-        link_preview_options: { is_disabled: true },
-        reply_markup: {
-          inline_keyboard: [[
-            { text: '👤 打开用户资料', url: `tg://user?id=${uid}` }
-          ]]
-        }
-      })));
+      await Promise.all(ADMIN_ID_LIST.map(async adminId => {
+        const adminLang = await getUserLang(adminId);
+        return requestTelegram('sendMessage', {
+          chat_id: adminId,
+          text: `${t(adminLang, 'verify_admin_notify')}\n\n🆔 <code>${uid}</code> (${escapeHtml(displayName)})${usernameLine}`,
+          parse_mode: 'HTML',
+          link_preview_options: { is_disabled: true },
+          reply_markup: {
+            inline_keyboard: [[
+              { text: t(adminLang, 'btn_open_profile'), url: `tg://user?id=${uid}` }
+            ]]
+          }
+        });
+      }));
     }
 
     return new Response(JSON.stringify({ success: true }), {
@@ -7108,9 +7793,10 @@ async function forwardMessagesToAdmin(messages, userId) {
     return { ok: true, result: successful[0].result };
   }
   if (results.length && results.every(result => result?.errorType === 'bot_blocked')) {
+    const guestLang = await getUserLang(userId);
     await sendMessage({
       chat_id: userId,
-      text: '⚠️ 消息发送失败：所有管理员均已屏蔽机器人，无法接收消息。'
+      text: t(guestLang, 'forward_all_admins_blocked')
     });
   }
   return results[0] || { ok: false, errorType: 'forward_failed' };
@@ -7397,10 +8083,12 @@ async function handleMessageReaction(reaction) {
 
 async function notifyForwardFailure(target, result) {
   const recipient = ADMIN_UID || target.chatId;
-  const hint = target.label === 'topic' ? '请检查机器人是否为群组管理员，并确认群组已启用话题。' : '';
+  const lang = await getUserLang(recipient);
+  const hint = target.label === 'topic' ? t(lang, 'forward_failed_topic_hint') : '';
+  const errText = result.userMessage || result.description || t(lang, 'err_generic');
   await sendMessage({
     chat_id: recipient,
-    text: `❌ 转发消息失败：${result.userMessage || result.description || '未知错误'}${hint ? `\n\n${hint}` : ''}`
+    text: t(lang, 'forward_failed', { error: errText }) + (hint ? `\n\n${hint}` : '')
   });
 }
 
@@ -7492,7 +8180,8 @@ async function sendGuestEditNotice(message, chatId, origMessageId, targetChatId)
     }
   }
 
-  const editNotice = `✏️ ${escapeHtml(message.text || '(无文本内容)')}`;
+  const noticeLang = await getUserLang(ADMIN_UID);
+  const editNotice = `✏️ ${escapeHtml(message.text || t(noticeLang, 'edit_no_text'))}`;
 
   if (existingNotice) {
     // 已有编辑提示，尝试更新
@@ -7553,6 +8242,7 @@ async function sendGuestEditNotice(message, chatId, origMessageId, targetChatId)
 async function handleAdminEditedMessage(message) {
   const adminMessageId = message.message_id.toString();
   const adminChatId = message.chat?.id ? String(message.chat.id) : ADMIN_UID;
+  const lang = await getUserLang(adminChatId);
 
   // 查找管理员回复消息的映射关系
   const replyMapData = await KV.get(`admin-reply-map-${adminChatId}:${adminMessageId}`)
@@ -7599,13 +8289,13 @@ async function handleAdminEditedMessage(message) {
         if (errorCode === 400) {
           await sendMessage({
             chat_id: adminChatId,
-            text: `⚠️ 无法编辑消息：消息已过期或被删除（超过48小时）。\n\n如需修改，请直接发送新消息。`
+            text: t(lang, 'edit_expired')
           });
         } else {
           // 其他错误，只通知管理员编辑失败
           await sendMessage({
             chat_id: adminChatId,
-            text: `⚠️ 编辑消息失败：${editReq.description || '未知错误'}\n\n如需修改，请直接发送新消息。`
+            text: t(lang, 'edit_failed', { error: editReq.description || t(lang, 'err_generic') })
           });
         }
       }
@@ -7613,14 +8303,14 @@ async function handleAdminEditedMessage(message) {
       // 解析映射数据失败
       await sendMessage({
         chat_id: adminChatId,
-        text: `❌ 处理编辑消息失败：${e.message}`
+        text: t(lang, 'edit_process_failed', { error: e.message })
       });
     }
   } else {
     // 未找到映射关系，可能是旧消息或映射已过期
     await sendMessage({
       chat_id: adminChatId,
-      text: `⚠️ 未找到消息映射关系，无法同步编辑到用户。\n\n可能原因：消息已过期（超过48小时）或机器人已重启。`
+      text: t(lang, 'edit_no_mapping')
     });
   }
 }
@@ -7662,6 +8352,7 @@ async function handleQuizCallback(callbackQuery) {
   const data = callbackQuery.data;
   const messageId = callbackQuery.message.message_id;
   const chatId = callbackQuery.message.chat.id;
+  const lang = await getUserLang(userId);
 
   // 【优化】使用 try/finally 统一管理验证锁的释放，避免分支遗漏导致死锁残留
   let lockAcquired = false;
@@ -7673,7 +8364,7 @@ async function handleQuizCallback(callbackQuery) {
       const waitTime = Math.ceil(lockResult.lockInfo.remainingMs / 1000);
       return await requestTelegram('answerCallbackQuery', {
         callback_query_id: callbackQuery.id,
-        text: `⏳ 验证进行中，请等待 ${waitTime} 秒后再试`,
+        text: t(lang, 'quiz_lock_wait', { seconds: waitTime }),
         show_alert: true
       });
     }
@@ -7684,7 +8375,7 @@ async function handleQuizCallback(callbackQuery) {
     if (parts.length !== 2) {
       return await requestTelegram('answerCallbackQuery', {
         callback_query_id: callbackQuery.id,
-        text: '❌ 无效的数据格式',
+        text: t(lang, 'quiz_invalid_data'),
         show_alert: true
       });
     }
@@ -7693,7 +8384,7 @@ async function handleQuizCallback(callbackQuery) {
     if (isNaN(answerIndex) || answerIndex < 0 || answerIndex > 3) {
       return await requestTelegram('answerCallbackQuery', {
         callback_query_id: callbackQuery.id,
-        text: '❌ 无效的选项',
+        text: t(lang, 'quiz_invalid_option'),
         show_alert: true
       });
     }
@@ -7703,13 +8394,13 @@ async function handleQuizCallback(callbackQuery) {
     if (!attemptLimit.allowed) {
       return await requestTelegram('answerCallbackQuery', {
         callback_query_id: callbackQuery.id,
-        text: `⏳ 尝试过于频繁，请等待 ${attemptLimit.retryAfter} 秒后再试`,
+        text: t(lang, 'quiz_attempt_rate', { seconds: attemptLimit.retryAfter }),
         show_alert: true
       });
     }
 
     // 验证答案
-    const result = await verifyQuizAnswer(userId, answerIndex);
+    const result = await verifyQuizAnswer(userId, answerIndex, lang);
 
     if (result.success) {
       // 答案正确，标记用户已验证
@@ -7735,9 +8426,9 @@ async function handleQuizCallback(callbackQuery) {
       }
 
       // 构建成功消息
-      let successText = '✅ 验证成功！您现在可以发送消息给管理员了。';
+      let successText = t(lang, 'quiz_success_msg');
       if (pendingResult.forwarded > 0) {
-        successText = `✅ 验证成功！\n\n📩 刚才的 ${pendingResult.forwarded} 条消息已送达管理员。`;
+        successText = t(lang, 'quiz_success_pending', { count: pendingResult.forwarded });
       }
 
       // 更新消息为成功状态
@@ -7777,7 +8468,7 @@ async function handleQuizCallback(callbackQuery) {
 
       return await requestTelegram('answerCallbackQuery', {
         callback_query_id: callbackQuery.id,
-        text: '验证成功！'
+        text: t(lang, 'quiz_success_toast')
       });
     } else {
       // 答案错误
@@ -7811,7 +8502,7 @@ async function handleQuizCallback(callbackQuery) {
     Logger.error('handle_quiz_callback_failed', e, { userId });
     return requestTelegram('answerCallbackQuery', {
       callback_query_id: callbackQuery.id,
-      text: '❌ 验证处理出错，请重试',
+      text: t(lang, 'quiz_error'),
       show_alert: true
     });
   } finally {
@@ -7831,6 +8522,7 @@ async function handleVerifyModeCallback(callbackQuery) {
   const data = callbackQuery.data;
   const chatId = callbackQuery.message.chat.id;
   const messageId = callbackQuery.message.message_id;
+  const lang = await getUserLang(callbackQuery.from.id);
 
   const newMode = data.split(':')[1];
 
@@ -7840,13 +8532,13 @@ async function handleVerifyModeCallback(callbackQuery) {
   if (!success) {
     return requestTelegram('answerCallbackQuery', {
       callback_query_id: callbackQuery.id,
-      text: '❌ 无法切换到该模式，请确保已配置 Turnstile 密钥',
+      text: t(lang, 'verify_mode_switch_failed'),
       show_alert: true
     });
   }
 
   // 更新菜单显示
-  const menu = await generateMainMenu();
+  const menu = await generateMainMenu(lang);
   await requestTelegram('editMessageText', {
     chat_id: chatId,
     message_id: messageId,
@@ -7857,6 +8549,6 @@ async function handleVerifyModeCallback(callbackQuery) {
 
   return requestTelegram('answerCallbackQuery', {
     callback_query_id: callbackQuery.id,
-    text: `已切换到：${getVerifyModeName(newMode)}`
+    text: t(lang, 'verify_mode_switched', { mode: getVerifyModeName(newMode, lang) })
   });
 }

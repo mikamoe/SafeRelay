@@ -117,8 +117,11 @@
 | `TURNSTILE_ALLOWED_HOSTNAMES` |  文本  | Turnstile 允许验证的域名白名单，多个域名用英文逗号或空格分隔 | `tgbot.example.workers.dev` |
 |      `TURNSTILE_ACTION`       |  文本  | Turnstile 验证动作名称，通常保持默认即可                    |          `tg_verify`          |
 |    `VERIFY_SIGNING_SECRET`    |  密钥  | 验证链接签名密钥；不设置时默认使用 `ENV_BOT_SECRET`          |       `my_sign_secret`        |
+|         `DEFAULT_LANG`        |  文本  | 机器人默认语言：`en`（英文，默认）或 `zh`（简体中文）。用户可用 `/language` 按个人切换，选择保存在 KV 中；别名 `BOT_LANG` 亦可 |          `en` / `zh`          |
 
 点击 `Save and deploy`（保存并部署）
+
+> 🌍 **语言说明**：机器人默认使用英文。访客和管理员均可发送 `/language` 切换为简体中文（按用户保存在 KV 的 `lang:<userId>` 中）；如需让所有未切换的用户默认使用中文，将 `DEFAULT_LANG` 设为 `zh`。机器人不会根据 Telegram 的 `language_code` 自动切换语言。
 
 ---
 
