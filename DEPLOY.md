@@ -1,314 +1,132 @@
 # SafeRelay - 部署指南
 
-> 💡 **部署前请仔细阅读完整文档**，确保所有配置项都正确填写。
+> ⚡ **推荐一键部署：约 3 分钟。** 你只需要准备 3 个值，其余（创建 Worker、创建 KV、部署代码）Cloudflare 全自动完成。
+> Turnstile、话题模式、AI 检测都是**可选**功能，不配也能正常用——默认的本地题库验证开箱即用。
 
 ---
 
-## 前置准备
+## 准备：只要 3 个值
 
-部署前需要准备以下内容：
-
-| 项目                     | 获取方式                                                    | 用途             |
-| ------------------------ | ----------------------------------------------------------- | ---------------- |
-| **Telegram Bot Token**   | [@BotFather](https://t.me/BotFather) 创建机器人             | 机器人身份认证   |
-| **Admin UID**            | [@userinfobot](https://t.me/userinfobot) 获取你的 TG ID     | 管理员身份验证   |
-| **Webhook 密钥**         | [UUID 生成器](https://www.uuidgenerator.net/) 生成随机 UUID | Webhook 安全验证 |
-| **Turnstile Site Key**   | Cloudflare Dashboard 创建                                   | 人机验证         |
-| **Turnstile Secret Key** | Cloudflare Dashboard 创建                                   | 人机验证         |
-
-如果准备使用话题模式，请提前确认：
-
-1. 在 BotFather 中关闭机器人 **Group Privacy**。
-2. 管理员群组必须是超级群组并开启 **Topics/话题** 功能。
-3. 机器人必须是群管理员，并拥有「管理话题」权限。
+| 值 | 从哪拿 | 用途 |
+| --- | --- | --- |
+| **Bot Token** | 在 Telegram 找 [@BotFather](https://t.me/BotFather)，`/newbot` 创建机器人 | 机器人身份 |
+| **Admin UID** | 找 [@userinfobot](https://t.me/userinfobot) 发任意消息，它会回你的数字 ID | 管理员身份 |
+| **Webhook 密钥** | 任意随机字符串，建议用 [UUID 生成器](https://www.uuidgenerator.net/) 生成一个 | 激活 Webhook 时的口令 |
 
 ---
 
-## 步骤 1：配置 Cloudflare Turnstile（必需）
+## ⚡ 一键部署（推荐）
 
-前往 `Cloudflare左边工具栏` → `应用程序安全` → `Turnstile`：
+### 第 1 步：点按钮，Cloudflare 自动部署
 
-1. 点击 **添加小组件** 按钮
-2. **小组件名称**：填写 `tgbot`（或其他名称）
-3. **主机名管理**：点击 **添加主机名** 按钮
-   - 选择 **添加自定义主机名**
-   - 填写你的 Workers 域名或自己的域名，例如 `tgbot.example.workers.dev` 改成自己的
-   - 点击输入框旁边的 **添加** 按钮
-   - 点击下方的 **添加** 按钮确认
-4. 点击 **创建** 按钮
-5. **保存密钥**：创建成功后会显示
-   - **站点密钥**：复制保存
-   - **密钥**：复制保存
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/mikamoe/SafeRelay)
 
-> ⚠️ **重要**：这两个密钥稍后要填写到代码中！
+登录 Cloudflare 并连接 GitHub 后，Cloudflare 会把仓库克隆到你的 GitHub 账号并自动部署。仓库里的 `wrangler.jsonc` 已声明 KV 绑定（不带 ID），**KV 命名空间会在部署时自动创建并绑定**，不需要你手动建 KV，也不需要粘贴代码。
 
----
+部署完成后记下你的 Worker 地址，形如 `https://saferelay.<你的子域>.workers.dev`。
 
-## 步骤 2：创建 KV 命名空间
+> 之后更新代码：在克隆出的仓库里合并上游新版本即可，Cloudflare 会自动重新部署；在控制台里填的变量不会被覆盖（配置里已开 `keep_vars`）。
 
-前往 `Cloudflare左边工具栏` → `存储和数据库` → `Workers KV`：
+### 第 2 步：填 3 个变量
 
-1. 点击右上角  `Create Instance`（创建命名空间）
-2. 命名为 `tgbot_kv`（或其他你喜欢的名字）
-3. 点击 `创建`（添加）
+进入 `Cloudflare → Workers & Pages → saferelay → 设置（Settings）→ 变量和机密（Variables and Secrets）`，添加：
 
----
+| 变量 | 类型 | 填什么 |
+| :--: | :--: | --- |
+| `ENV_BOT_TOKEN` | 密钥 | BotFather 给的 Token |
+| `ENV_BOT_SECRET` | 密钥 | 你准备的随机密钥 |
+| `ENV_ADMIN_UID` | 文本 | 你的 Telegram 数字 ID |
 
-## 步骤 3：部署 Worker
+保存后会自动重新部署，等它完成即可。
 
-### 步骤 3.1：创建 Worker
+### 第 3 步：激活 Webhook（一条命令）
 
-前往 `Cloudflare` → `计算` → `Workers & Pages`：
+把下面命令里的域名和密钥换成你的，执行一次：
 
-1. 点击 `创建应用程序` → `从 Hello World! 开始`
-2. `Worker Name` 填 `tgbot`，点击 `部署`
-3. 复制你的 Worker 域名，例如 `tgbot.example.workers.dev`
+```bash
+curl -X POST "https://<你的 Worker 地址>/registerWebhook" -H "X-SafeRelay-Admin-Secret: <ENV_BOT_SECRET>"
+```
 
-### 步骤 3.2：回填 Turnstile 主机名
-
-回到 `应用程序安全` → `Turnstile`：
-
-1. 找到刚才创建的小组件 → 最右侧 **三个点** → **编辑**
-2. 在 **主机名管理** 中添加 Worker 域名
-3. 删除之前写的临时主机名，点击 **更新**
-
-> ⚠️ Turnstile 主机名必须和 Worker 域名一致，否则验证页面加载失败
-
-### 步骤 3.3：编辑代码
-
-1. `Workers & Pages` → 你的 worker → 右上角 `编辑代码`
-2. 将 [worker.js](./worker.js) 全部内容粘贴覆盖
-3. 点击右上角 `部署`
-
-### 步骤 3.4：绑定 KV
-
-`Workers & Pages` → 你的 worker → `设置` → `绑定` → `添加绑定+`：
-
-- **变量名称**: `KV`（必须大写，代码写死了这个变量名）
-- **KV 命名空间**: 选择刚才创建的 `tgbot_kv`
-- 点击 `添加绑定`
-
-### 步骤 3.5：设置环境变量
-
-`Workers & Pages` → 你的 worker → `设置` → `变量和机密`：
-
-### 必填变量
-
-|       变量       | 类型 | 说明                                                         |                  示例                  |
-| :--------------: | :--: | :----------------------------------------------------------- | :------------------------------------: |
-| `ENV_BOT_TOKEN`  | 密钥 | Telegram Bot Token                                           |          `123456:ABC-DEF...`           |
-| `ENV_BOT_SECRET` | 密钥 | 用于 `/registerWebhook` 的开头网站获取的 `随机UUID`也可自己填写 | `d7ecca95-e45e-41f4-b018-d5cc05486283` |
-| `ENV_ADMIN_UID`  | 文本 | 你的TGID 至少填写一个管理员ID。                              |              `123456789`               |
-
-### 建议添加
-|           变量            | 类型 | 说明                      |       示例       |
-| :-----------------------: | :--: | :------------------------ | :--------------: |
-|  `CF_TURNSTILE_SITE_KEY`  | 密钥 | `站点密钥` 刚才复制到那个 |  `0x4AAAAAA...`  |
-| `CF_TURNSTILE_SECRET_KEY` | 密钥 | `密钥` 刚才复制到那个     |  `0x4AAAAAA...`  |
-|        `GROUP_ID`         | 文本 | 你的群组ID                | `-1001234567890` |
-
-### 可选变量
-
-|             变量              |  类型  | 说明                                                         |             示例              |
-| :---------------------------: | :----: | :----------------------------------------------------------- | :---------------------------: |
-|          `ADMIN_IDS`          |  文本  | 多管理员 ID 列表，用英文逗号分隔；不能代替必填变量 `ENV_ADMIN_UID` |         `111,222,333`         |
-|     `CF_ACCOUNT_ID`      |  密钥  | Cloudflare Account ID（启用 AI 检测时需要）                  |    `abc123...`    |
-|      `CF_AI_TOKEN`       |  密钥  | Cloudflare API Token，权限选 Workers AI → Run（启用 AI 检测时需要） | `sk-abc123...` |
-| `TURNSTILE_ALLOWED_HOSTNAMES` |  文本  | Turnstile 允许验证的域名白名单，多个域名用英文逗号或空格分隔 | `tgbot.example.workers.dev` |
-|      `TURNSTILE_ACTION`       |  文本  | Turnstile 验证动作名称，通常保持默认即可                    |          `tg_verify`          |
-|    `VERIFY_SIGNING_SECRET`    |  密钥  | 验证链接签名密钥；不设置时默认使用 `ENV_BOT_SECRET`          |       `my_sign_secret`        |
-|         `DEFAULT_LANG`        |  文本  | 机器人默认语言：`en`（英文，默认）或 `zh`（简体中文）。用户可用 `/language` 按个人切换，选择保存在 KV 中；别名 `BOT_LANG` 亦可 |          `en` / `zh`          |
-
-点击 `Save and deploy`（保存并部署）
-
-> 🌍 **语言说明**：机器人默认使用英文。访客和管理员均可发送 `/language` 切换为简体中文（按用户保存在 KV 的 `lang:<userId>` 中）；如需让所有未切换的用户默认使用中文，将 `DEFAULT_LANG` 设为 `zh`。机器人不会根据 Telegram 的 `language_code` 自动切换语言。
-
----
-
-## 步骤 4：激活 Webhook
-
-部署完成后，使用 POST 请求激活机器人。请求头必须携带 `X-SafeRelay-Admin-Secret`，其值为 `ENV_BOT_SECRET`：
+Windows PowerShell 用这条：
 
 ```powershell
-Invoke-WebRequest -Method POST `
-  -Uri "https://<你的 worker 域名>/registerWebhook" `
-  -Headers @{ "X-SafeRelay-Admin-Secret" = "<ENV_BOT_SECRET>" }
+Invoke-WebRequest -Method POST -Uri "https://<你的 Worker 地址>/registerWebhook" -Headers @{ "X-SafeRelay-Admin-Secret" = "<ENV_BOT_SECRET>" }
 ```
 
-例如：`https://tgbot.example.workers.dev/registerWebhook`。不要在浏览器地址栏直接访问该接口，也不要将密钥写入 URL。
+> 不要用浏览器直接打开这个地址（必须是 POST 请求），也不要把密钥写进 URL。
+
+### 第 4 步：测试
+
+在 Telegram 给你的机器人发 `/start`，能收到验证题 = 部署完成 ✅
+
+默认是英文界面；想用中文，发 `/language` 切换（按用户保存）。想让所有人默认中文，再加一个变量 `DEFAULT_LANG=zh` 即可。
 
 ---
 
-## 可选：启用话题模式
+## 🛠 手动部署（备用路径）
 
-如果希望管理员在 Telegram 论坛话题里统一处理访客消息：
+不想用一键部署，也可以全程在控制台手动完成，同样只需要 3 个变量：
 
-1. 在 `Workers & Pages → 设置 → 变量和机密` 中设置 `GROUP_ID`（论坛群组 ID，如 `-1001234567890`）。
-2. 确保机器人在该群组是管理员，让拥有“管理话题”权限，并且群组要确保群组开启了话题功能。
-3. 在 Telegram 你的刚刚创建的bot中发送 `/menu`，点击「💬 转发模式」，切换为“话题转发”。
-4. 其实步骤 4 完成后应该会弹窗
+1. **创建 KV**：`存储和数据库 → Workers KV → 创建`，名字随意（如 `tgbot_kv`）。
+2. **创建 Worker**：`Workers & Pages → 创建 → 从 Hello World 开始`，名字填 `saferelay`，部署。
+3. **粘贴代码**：进入该 Worker → `编辑代码`，把 [worker.js](./worker.js) 全文粘贴覆盖，部署。
+4. **绑定 KV**：`设置 → 绑定 → 添加`，变量名必须填 `KV`（大写），选第 1 步的命名空间。
+5. **填变量 + 激活**：同上面第 2、3 步。
 
-启用后，机器人会为每位访客自动创建话题，并把后续消息都发到对应的话题中。管理员在话题里回复即可把消息回传给访客。
-
-发送 `/start` 给你的机器人，确认可以收到机器人回复。
-
-> 💡 **管理员指令**：详细指令说明请查看 [README.md](./README.md#-管理员指令)
+命令行用户也可以用 Wrangler 一条龙：`npx wrangler deploy`（仓库的 `wrangler.jsonc` 已配好，KV 会自动创建）。
 
 ---
 
-## 前方的区域请自行探索，现在的功能已经够用了
-## （可选）步骤 8：配置 Workers AI
+## 🎛 可选功能（按需再看，不配不影响使用）
 
-如需启用 AI 智能垃圾消息检测，请完成以下步骤：
+### Turnstile 网页验证（可选，默认关）
 
-### 1. 获取 Cloudflare Account ID
+默认验证是本地题库（答一道简单题），无需任何配置。想要 Cloudflare Turnstile 网页验证时再配：
 
-1. 前往 [Cloudflare Dashboard](https://dash.cloudflare.com/)
-2. 进入 `Workers & Pages`，页面右侧即可看到 **Account ID**，点击复制
-3. 或者直接看浏览器地址栏：`https://dash.cloudflare.com/<这串就是 Account ID>`
+1. `Cloudflare → 应用程序安全 → Turnstile → 添加小组件`，主机名填你的 Worker 域名，创建后拿到 **站点密钥** 和 **密钥**。
+2. 给 Worker 加两个密钥变量：`CF_TURNSTILE_SITE_KEY`、`CF_TURNSTILE_SECRET_KEY`。
+3. 给机器人发 `/menu → 🛡️ 验证模式`，切到 Turnstile 或双重验证。
 
-### 2. 创建 API Token
+### 话题模式（可选）
 
-1. 右上角头像 → **My Profile** → **API Tokens**
-2. 点击 **Create Token**
-3. 找到 **Workers AI** 模版（或点 **Create Custom Token** 手动创建），点击 **使用模板**
-4. 如果手动创建，配置权限：
-   - Permissions: `Account` → `Workers AI` → `Edit`
-   - Account Resources: 选择你的账户
-5. 点击 **Continue to summary** → **Create Token**
-6. 复制生成的 Token（只显示一次）
+把每位访客的对话整理成论坛群组里的话题：
 
-### 3. 设置环境变量
+1. 准备一个开启了 **Topics** 的超级群组，把机器人拉进去并设为管理员（需要「管理话题」权限），并在 BotFather 关闭机器人的 **Group Privacy**。
+2. 给 Worker 加文本变量 `GROUP_ID`（群组 ID，形如 `-1001234567890`）。
+3. 发 `/menu → 💬 转发模式`，切到「话题转发」。
 
-添加以下两个**密钥**类型变量：
+### AI 垃圾检测（可选）
 
-```
-CF_ACCOUNT_ID = 第一步的 Account ID
-CF_AI_TOKEN   = 第二步的 API Token
-```
+1. 加两个密钥变量：`CF_ACCOUNT_ID`（控制台 `Workers & Pages` 页右侧可见）和 `CF_AI_TOKEN`（头像 → My Profile → API Tokens → 用 Workers AI 模板创建）。
+2. 发 `/menu → 🤖 AI 检测 → 开启`。免费额度 10,000 Neurons/天，个人使用一般够用。
 
-### 4. 启用 AI 检测
+### 其他可选变量
 
-1. 发送 `/menu` 打开管理面板
-2. 点击 **🤖 AI 检测**
-3. 点击 **🟢 开启 AI 检测**
-4. 可通过 **⚙️ 调整置信度** 设置阈值（推荐 0.7）
-
-### 5. 监控 AI 使用量
-
-- 管理面板 → 🤖 AI 检测 → **📊 查看使用统计**
-- 在 [Cloudflare AI Dashboard](https://dash.cloudflare.com/ai/workers-ai) 查看 Workers AI 总用量
-
-> 💡 **免费额度**：Workers AI 每天提供 10,000 Neurons 免费额度（短文本分类每次约消耗 1-2 Neurons），个人使用通常不会超出。
-
----
-
-## （可选）步骤 9：配置论坛群组话题
-
-如使用 Telegram 论坛群组（Forum Group），需要配置话题功能：
-
-### 1. 获取群组 ID
-
-1. 将机器人添加到论坛群组
-2. 发送 `/start` 给机器人
-3. 查看日志或使用 [@RawDataBot](https://t.me/RawDataBot) 获取群组 ID
-4. 群组 ID 通常为负数，如 `-1001234567890`
-
-### 2. 设置环境变量
-
-添加环境变量：
-```
-GROUP_ID=-1001234567890
-```
-
-### 3. 测试话题功能
-
-1. 用户发送消息给机器人
-2. 机器人应自动在论坛群组创建话题
-3. 消息应转发到对应话题
-
-### 4. 清理失效话题
-
-如话题被删除，可使用清理命令：
-```
-/cleanup
-```
-
----
-
-## ⚠️ 注意事项
-
-### 核心配置
-1. **KV 绑定名称**：请确保 KV Namespace 的变量名绑定为 `KV`，否则机器人无法记忆状态。
-2. **KV 延迟**：Cloudflare KV 存在短暂的最终一致性延迟（约 1 分钟）。如果你刚解封用户，可能需要等几十秒才会生效。
-3. **Webhook 必须激活**：部署完成后必须访问 `/registerWebhook`，否则机器人无法接收消息。
-
-### 功能选项
-4. **联合封禁**：使用第三方服务查询，会共享用户 ID，请根据隐私需求决定是否开启。
-5. **消息映射过期**：消息转发映射关系保存 48 小时，超过后无法回复旧消息。
-6. **Workers AI**：为可选功能，需设置 `CF_ACCOUNT_ID` 和 `CF_AI_TOKEN` 环境变量。使用 Llama 3.2 3B 模型，每天 10,000 Neurons 免费额度。
-7. **论坛群组**：仅在使用 Telegram 论坛群组时需要设置 `GROUP_ID`。
-
-### 安全配置
-8. **并发验证锁**：已默认启用，防止并发验证攻击。
+| 变量 | 说明 |
+| --- | --- |
+| `ADMIN_IDS` | 多管理员 ID，英文逗号分隔（如 `111,222`）；不能替代必填的 `ENV_ADMIN_UID` |
+| `DEFAULT_LANG` | 默认语言：`en`（默认）/ `zh`；别名 `BOT_LANG`。用户仍可 `/language` 单独切换 |
+| `VERIFY_SIGNING_SECRET` | 验证链接签名密钥；不设时默认用 `ENV_BOT_SECRET` |
+| `TURNSTILE_ALLOWED_HOSTNAMES` | Turnstile 允许的域名白名单，逗号或空格分隔 |
+| `TURNSTILE_ACTION` | Turnstile 动作名，一般保持默认 |
 
 ---
 
 ## ❓ 常见问题
 
-### 部署问题
+**机器人不回复？** 按顺序查：① Webhook 激活了吗（重跑第 3 步命令，看返回是否成功）；② `ENV_BOT_TOKEN` 填对了吗；③ `Workers & Pages → saferelay → 日志（Logs）` 看报错。
 
-**Q: 为什么部署后机器人不回复消息？**  
-A: 请检查：
-1. Webhook 是否已激活（访问 `/registerWebhook`）
-2. 环境变量 `ENV_BOT_TOKEN` 是否正确
-3. 查看 Cloudflare Worker 的日志排查错误
+**变量改完没生效？** 保存变量后等自动部署完成（约十几秒）再试；KV 是最终一致性存储，个别状态变更最长可能要约 1 分钟才在全球生效。
 
-**Q: 如何查看日志？**  
-A: 进入 Cloudflare Dashboard → Workers & Pages → 你的 Worker → Logs
+**如何更新代码？** 一键部署用户：在克隆仓库里同步上游后自动部署。手动部署用户：把新版 `worker.js` 粘贴覆盖并部署。两种都不用重新激活 Webhook，也不用重填变量。
 
-**Q: 如何更新代码？**  
-A: 手动复制新版本的 `worker.js` 代码，重新部署：
-1. 下载最新版 [worker.js](./worker.js)
-2. 进入你的 Worker → `Edit Code`
-3. 粘贴新代码（注意保留你的 Turnstile 密钥）
-4. 点击 `Deploy`
+**话题不创建 / AI 不生效？** 先确认对应可选变量已设置、机器人权限足够，再看日志里 `topic` / `ai_` 开头的条目。
 
-**Q: 更新代码后需要重新激活 Webhook 吗？**  
-A: 不需要，Webhook 只需激活一次。
+---
 
-### Workers AI 相关
+## ⚠️ 注意事项
 
-**Q: Workers AI 收费吗？**  
-A: Workers AI 每天提供 10,000 Neurons 免费额度，短文本分类每次约消耗 1-2 Neurons，个人使用通常不会超出免费额度。
-
-**Q: AI 检测不生效怎么办？**  
-A: 请检查：
-1. 是否设置了 `CF_ACCOUNT_ID` 和 `CF_AI_TOKEN` 两个环境变量
-2. 是否在管理面板（🤖 AI 检测）中启用了 AI 检测
-3. 在 Cloudflare Worker Logs 中搜索 `ai_api_call_failed` 或 `ai_detection_failed` 排查错误
-
-**Q: 如何调整 AI 检测阈值？**  
-A: 发送 `/menu` → 🤖 AI 检测 → ⚙️ 调整置信度 → 输入数值（推荐 0.7）
-
-### 论坛群组相关
-
-**Q: 话题功能不生效怎么办？**  
-A: 请检查：
-1. 是否设置 `GROUP_ID` 环境变量
-2. 群组是否为论坛群组（Forum Group）
-3. 机器人是否有创建话题的权限
-
-**Q: 如何清理失效的话题？**  
-A: 使用 `/cleanup` 命令清理失效的话题映射
-
-### 性能优化
-
-**Q: 如何查看缓存性能？**  
-A: 发送 `/cachestats` 查看缓存统计
-
-**Q: 缓存命中率低怎么办？**  
-A: 这是正常现象，L2 缓存会跨实例共享，整体性能仍然优秀。
-
-**Q: 如何清空缓存？**  
-A: 发送 `/clearcache` 清空所有缓存
+1. **KV 绑定名必须为 `KV`**（一键部署已自动处理；手动绑定时别写错）。
+2. **消息映射保存 48 小时**，超过后无法回复旧消息。
+3. **广播有 24 小时冷却**，每次最多 500 人，可分批继续。
+4. **联合封禁**（`/menu` 里开启）会把访客 ID 发给第三方封禁服务查询，介意隐私就不要开。

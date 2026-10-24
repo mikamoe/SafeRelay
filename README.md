@@ -35,9 +35,17 @@
 
 ## 🚀 Quick Start
 
-See the full deployment guide: **[DEPLOY.md](./DEPLOY.md)**.
+**One-click deploy (recommended)** — the repo ships a `wrangler.jsonc`, so Cloudflare creates the Worker **and** the KV namespace for you automatically. No manual KV creation, no code pasting:
 
-Deployment, environment variables, webhook activation, Turnstile setup, and topic mode are all documented there.
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/mikamoe/SafeRelay)
+
+After it deploys, you only need to:
+
+1. Add **3 variables** in the Worker → *Settings → Variables and Secrets*: `ENV_BOT_TOKEN` (from [@BotFather](https://t.me/BotFather)), `ENV_BOT_SECRET` (any random UUID), `ENV_ADMIN_UID` (your Telegram user ID).
+2. Activate the webhook once (one `curl` command — see [DEPLOY.md](./DEPLOY.md)).
+3. Send `/start` to your bot. Done.
+
+Turnstile, topic mode and AI detection are all **optional** — the default local quiz works with zero extra setup. Full guide (one-click + manual path + options): **[DEPLOY.md](./DEPLOY.md)**.
 
 ---
 
@@ -189,6 +197,7 @@ The bot then creates a topic for each new guest and forwards their messages ther
 ```
 SafeRelay/
 ├── worker.js          # Main program
+├── wrangler.jsonc     # Worker config (KV auto-provisioned on deploy)
 ├── DEPLOY.md          # Deployment guide
 ├── README.md          # This document
 ├── LICENSE            # GPL-3.0 license
@@ -228,7 +237,11 @@ SafeRelay/
 
 ### 快速开始
 
-请直接查看详细部署教程：**[DEPLOY.md](./DEPLOY.md)**。
+**推荐一键部署**：仓库已带 `wrangler.jsonc`，点击下方按钮后，Cloudflare 会自动创建 Worker 和 KV，无需手动建 KV、无需粘贴代码。部署后只剩三步：填 3 个变量 → 激活 Webhook（一条命令）→ 给机器人发 `/start`。
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/mikamoe/SafeRelay)
+
+Turnstile、话题模式、AI 检测均为可选功能，默认本地题库开箱即用。完整教程（一键 + 手动 + 可选项）：**[DEPLOY.md](./DEPLOY.md)**。
 
 ### 语言说明
 
