@@ -66,7 +66,7 @@ Invoke-WebRequest -Method POST -Uri "https://<你的 Worker 地址>/registerWebh
 ### 1.2.0 的通知与话题行为
 
 - **🆕 新用户接入**：访客通过验证后会立即收到一张接入卡片——私聊模式发到管理员私聊；话题模式会立刻为该访客建好话题并把卡片发进话题。卡片上有 ⭐ 信任 / 🚫 封禁按钮，点一下即可处理。
-- **📵 屏蔽通知**：访客屏蔽机器人后，管理员会收到通知（话题模式下发进该访客已有的话题）。依赖 `my_chat_member` 事件，升级用户务必按上方提示重新激活一次 Webhook。
+- **🔕 屏蔽通知**：访客屏蔽机器人后，管理员会收到通知（话题模式下发进该访客已有的话题）。依赖 `my_chat_member` 事件，升级用户务必按上方提示重新激活一次 Webhook。
 - **🎛 话题内面板**：话题模式开启后，所有管理员命令和面板都在论坛群组话题里执行和回复；此时在私聊里发 `/menu` 或 `/help`，机器人会回一条引导消息（带打开群组 General 话题的按钮）。在某个访客的话题里发 `/ban`、`/reset`、`/trust` 等命令且不带 ID 时，默认作用于该话题的访客。
 
 ---
@@ -106,7 +106,7 @@ Invoke-WebRequest -Method POST -Uri "https://<你的 Worker 地址>/registerWebh
 ### AI 垃圾检测（可选）
 
 1. 加两个密钥变量：`CF_ACCOUNT_ID`（控制台 `Workers & Pages` 页右侧可见）和 `CF_AI_TOKEN`（头像 → My Profile → API Tokens → 用 Workers AI 模板创建）。
-2. 发 `/menu → 🤖 AI 检测 → 开启`。免费额度 10,000 Neurons/天，个人使用一般够用。
+2. 发 `/menu → 🪄 AI 检测 → 开启`。免费额度 10,000 Neurons/天，个人使用一般够用。
 
 ### 其他可选变量
 

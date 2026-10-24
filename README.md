@@ -4,6 +4,8 @@
 
 ## Private Chat Relay Bot — Anti-Harassment · Zero Cost · Serverless
 
+*v1.2.1 — polished ✨ emoji set, tighter menus & cards, bilingual UI (EN default / 简体中文)*
+
 [![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow?logo=javascript&logoColor=white)](https://developer.mozilla.org/docs/Web/JavaScript) [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare%20Workers-100K%2Fday-orange?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/) [![Telegram Bot](https://img.shields.io/badge/Telegram%20Bot-API%208.0+-blue?logo=telegram&logoColor=white)](https://core.telegram.org/bots/api) [![License](https://img.shields.io/badge/License-GPL--3.0-green)](LICENSE)
 
 **English** | [简体中文](#简体中文)
@@ -27,7 +29,7 @@
 | **Forwarding Modes** | Switch between private chat and forum topics |
 | **Broadcast** | Send a message to all verified users (HTML supported, 24-hour cooldown) |
 | **🆕 New-User Alerts** | A card is posted when a guest passes verification (per admin DM, or into the guest's topic in Topic Mode) with one-tap Trust / Ban |
-| **📵 Block Alerts** | Admins are notified when a guest blocks the bot (via `my_chat_member`) |
+| **🔕 Block Alerts** | Admins are notified when a guest blocks the bot (via `my_chat_member`) |
 | **Topic-Mode Panels** | With Topic Mode on, admin commands and panels run inside the forum group topics; `/menu` in a private chat points you to the group |
 | **Edit Sync** | Guest and admin message edits are synced in real time |
 | **Statistics** | Daily message counts and active users |
@@ -68,17 +70,17 @@ SafeRelay uses one consistent emoji set across all menus and messages:
 
 | Emoji | Meaning | Emoji | Meaning |
 | ---- | ---- | ---- | ---- |
-| 🎛️ | Admin panel / home | 🆔 | User ID (UID) |
+| ✨ | Admin panel / home | 🆔 | User ID (UID) |
 | 🛡️ | Verification prompt (guest-facing) | 👤 | Profile / name |
 | 🔐 | Verification settings | 🏷️ | Username |
 | 🧹 | Spam filter | ⭐ | Trust |
 | 🗑️ | Spam topic | 🚫 | Ban / block |
-| 🧠 | AI detection | 🚨 | Fraud alert |
+| 🪄 | AI detection | 🚨 | Fraud alert |
 | 🤖 | The bot itself | 🆕 | New user joined |
-| 🌐 | Federation ban | 📵 | User blocked the bot |
+| 🌐 | Federation ban | 🔕 | User blocked the bot |
 | 👥 | User management | 📣 | Broadcast |
-| 👋 | Welcome message | ♻️ | Stale-topic cleanup |
-| ✉️ | Auto-reply | 🗄️ | Cache |
+| 👋 | Welcome message | 🧽 | Stale-topic cleanup |
+| ✉️ | Auto-reply | ⚡ | Cache stats |
 | 💬 | Forwarding | 🔑 | Keywords |
 | 📊 | Statistics | ⏳ | Rate limit / cooldown |
 | 🌍 | Language | 🟢 / 🔴 | On / off |
@@ -144,7 +146,7 @@ The bot then creates a topic for each new guest and forwards their messages ther
 
 ---
 
-## 🧠 How It Works
+## ⚙️ How It Works
 
 ```text
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
@@ -244,7 +246,7 @@ SafeRelay/
 | **转发模式** | 私聊 ↔ 话题群组一键切换 |
 | **广播推送** | 向所有已验证用户群发消息，支持 HTML，24 小时冷却 |
 | **🆕 新用户通知** | 访客通过验证后立即推送接入卡片（私聊模式发管理员私聊，话题模式发进该访客的话题），卡片上可一键信任 / 封禁 |
-| **📵 屏蔽通知** | 访客屏蔽机器人后通知管理员（基于 `my_chat_member` 事件） |
+| **🔕 屏蔽通知** | 访客屏蔽机器人后通知管理员（基于 `my_chat_member` 事件） |
 | **话题内面板** | 话题模式开启后，管理员命令与面板都在论坛群组话题里执行；私聊里发 `/menu` 会引导你去群组 |
 | **双语界面** | 默认英文，可按用户切换为简体中文（见上方 Language 章节） |
 | **零成本运行** | Cloudflare Workers 免费额度长期稳定运行 |
