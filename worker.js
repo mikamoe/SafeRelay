@@ -1,7 +1,7 @@
 /**
  * SafeRelay - Telegram Private Chat Relay Bot
  * 项目地址: https://github.com/qianqi32/SafeRelay
- * 版本: 1.3.2
+ * 版本: 1.3.3
  * 当前版本可能仍不稳定，如遇到 BUG 请提交至 issues 或者直接联系 @KiyukieBot
 */
 
@@ -152,7 +152,7 @@ const I18N = {
     verify_turnstile_with_welcome: '🛡️ Please complete the verification below to continue:',
     verify_turnstile_default: '🛡️ To prevent spam, please tap the button below to complete human verification:',
     btn_verify_turnstile: '🛡️ Start Verification',
-    turnstile_success: '✅ Verification passed!\n\nIf you verified more than once, please wait a minute before sending a message so the status can sync.',
+    turnstile_success: '✅ Verification passed! You can now message the admin.',
     turnstile_success_pending: '✅ Verification passed!\n\n📩 Your {count} queued message(s) were delivered to the admin.',
     new_user_title: '🆕 <b>New User Joined</b>',
     new_user_name: '👤 Name: {name}',
@@ -550,7 +550,7 @@ const I18N = {
     verify_turnstile_with_welcome: '🛡️ 请完成下方验证以继续对话：',
     verify_turnstile_default: '🛡️ 为了防止垃圾消息，请点击下方按钮完成人机验证：',
     btn_verify_turnstile: '🛡️ 开始人机验证',
-    turnstile_success: '✅ 验证通过！\n\n如果重复验证请等待一分钟后再发送消息，以确保验证状态同步。',
+    turnstile_success: '✅ 验证通过！您现在可以发送消息给管理员了。',
     turnstile_success_pending: '✅ 验证通过！\n\n📩 刚才的 {count} 条消息已送达管理员。',
     new_user_title: '🆕 <b>新用户接入</b>',
     new_user_name: '👤 昵称：{name}',
@@ -3653,6 +3653,18 @@ async function getUserDisplayName(userId) {
   return 'Unknown';
 }
 
+// 【KV 最终一致性】KV 写入在全球 PoP 之间同步最长可能需要约 60 秒：
+// 验证回调（落在访客浏览器就近的 PoP）刚写下 verified-<uid>，访客立刻回到 Telegram
+// 发消息（Webhook 落在另一个 PoP），短时间内可能读不到该写入，于是被二次要求验证。
+// 因此 isUserVerified 的 KV 阶段分两档预算：
+// - 短预算（默认，与旧行为一致）：新用户/冷路径快速得到“未验证”结论，及时下发验证提示；
+// - 长预算：该用户近期被下发过验证提示（verify_prompted- 标记，见 handleVerification），
+//   很可能刚通过验证、只是写入尚未同步，此时耐心等待 KV 同步（累计约 20 秒，命中即返回）。
+const VERIFY_GATE_SHORT_DELAYS_MS = [1500, 1500];
+const VERIFY_GATE_LONG_DELAYS_MS = [1000, 2000, 3000, 4000, 5000, 5000];
+const VERIFY_PROMPTED_KEY_PREFIX = 'verify_prompted-';
+const VERIFY_PROMPTED_TTL_SECONDS = 15 * 60; // 15 分钟
+
 // 检查用户是否已验证（优先使用内存缓存，带重试机制）
 async function isUserVerified(userId) {
   const verifiedKey = 'verified-' + userId;
@@ -3669,20 +3681,28 @@ async function isUserVerified(userId) {
     if (isVerified) return true;
   }
 
-  const maxRetries = 3;
-  const retryDelay = 1500;
-
-  for (let i = 0; i < maxRetries; i++) {
+  const readVerifiedFromKv = async () => {
     const kvVerified = await KV.get(verifiedKey);
     if (kvVerified === 'true') {
       memSet(verifiedKey, 'true', 5 * 60 * 1000);
       await cacheApiSet(verifiedKey, 'true', 300);
       return true;
     }
+    return false;
+  };
 
-    if (i < maxRetries - 1) {
-      await new Promise(r => setTimeout(r, retryDelay));
-    }
+  if (await readVerifiedFromKv()) return true;
+
+  // 选择预算：标记本身在下发提示时写入（早于验证写入），到这一步通常已同步可见
+  let longBudget = false;
+  try {
+    longBudget = !!(await KV.get(VERIFY_PROMPTED_KEY_PREFIX + userId));
+  } catch (e) { /* 标记读取失败时按短预算处理 */ }
+
+  const delays = longBudget ? VERIFY_GATE_LONG_DELAYS_MS : VERIFY_GATE_SHORT_DELAYS_MS;
+  for (const delay of delays) {
+    await new Promise(r => setTimeout(r, delay));
+    if (await readVerifiedFromKv()) return true;
   }
 
   return false;
@@ -7611,6 +7631,12 @@ async function handleVerification(message, chatId, origin) {
       });
     }
   }
+
+  // 【KV 同步标记】记下“刚给该用户下发过验证提示”：isUserVerified 据此对该用户启用
+  // 长预算等待 KV 同步，避免验证刚通过、写入尚未全球同步时被二次要求验证（标记 TTL 15 分钟）
+  try {
+    await KV.put(VERIFY_PROMPTED_KEY_PREFIX + chatId, '1', { expirationTtl: VERIFY_PROMPTED_TTL_SECONDS });
+  } catch (e) { /* 标记写入失败不影响验证流程本身 */ }
 
   // 本地题库验证
   if (verifyMode === 'local_quiz') {
