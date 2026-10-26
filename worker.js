@@ -1,7 +1,7 @@
 /**
  * SafeRelay - Telegram Private Chat Relay Bot
  * 项目地址: https://github.com/qianqi32/SafeRelay
- * 版本: 1.3.1
+ * 版本: 1.3.2
  * 当前版本可能仍不稳定，如遇到 BUG 请提交至 issues 或者直接联系 @KiyukieBot
 */
 
@@ -34,7 +34,11 @@ const GROUP_ID = (() => {
 // is intentionally NOT used to auto-switch: the bot stays in English
 // until the user (or DEFAULT_LANG / BOT_LANG) says otherwise.
 const SUPPORTED_LANGS = ['en', 'zh'];
-const langCache = new Map();
+// 语言缓存只缓存 KV 中真实存储过的语言（正命中），且带 TTL：
+// 某个 isolate 在用户切换语言前读到“未设置”时，绝不能把回退值缓存下来，
+// 否则该 isolate 之后永远读不到 KV 里的新语言（菜单语言串台 Bug 的根源）。
+const LANG_CACHE_TTL_MS = 60 * 1000;
+const langCache = new Map(); // id -> { lang, ts }
 
 function normalizeLang(value) {
   if (!value || typeof value !== 'string') return null;
@@ -52,13 +56,21 @@ async function getUserLang(userId) {
   const fallback = getDefaultLang();
   if (userId === null || userId === undefined || userId === '') return fallback;
   const id = String(userId);
-  if (langCache.has(id)) return langCache.get(id);
+  const cached = langCache.get(id);
+  if (cached && (Date.now() - cached.ts < LANG_CACHE_TTL_MS)) return cached.lang;
   try {
     if (typeof KV !== 'undefined' && KV) {
       const stored = await KV.get('lang:' + id);
-      const lang = normalizeLang(stored) || fallback;
-      langCache.set(id, lang);
-      return lang;
+      const lang = normalizeLang(stored);
+      if (lang) {
+        // 只缓存正命中（KV 里真实存有合法语言）；带 TTL，使其他 isolate
+        // 上的切换最迟在 TTL 后对本 isolate 可见。
+        langCache.set(id, { lang, ts: Date.now() });
+        return lang;
+      }
+      // KV 未设置 / 值非法：返回回退值但不缓存，下次调用重新读 KV，
+      // 保证任何 isolate 写入的语言切换都能被及时看到。
+      return fallback;
     }
   } catch (e) { /* fall through to default */ }
   return fallback;
@@ -68,7 +80,7 @@ async function setUserLang(userId, lang) {
   const normalized = normalizeLang(lang) || getDefaultLang();
   if (userId === null || userId === undefined || userId === '') return normalized;
   const id = String(userId);
-  langCache.set(id, normalized);
+  langCache.set(id, { lang: normalized, ts: Date.now() });
   try { await KV.put('lang:' + id, normalized); } catch (e) { /* cache still applies */ }
   return normalized;
 }
@@ -468,6 +480,7 @@ const I18N = {
     cleanup_preview_note: 'Preview Mode: nothing was deleted',
     cleanup_errors: 'Errors: {count}',
     cleanup_invalid_list_title: '<b>Invalid Users:</b>',
+    cleanup_invalid_item: '• User {uid}: Topic {threadId}',
     cleanup_more: '... and {count} more',
     cleanup_failed: '❌ <b>Cleanup Failed</b>\n\nError: {error}\n\nPlease check the logs or try again.'
   },
@@ -865,6 +878,7 @@ const I18N = {
     cleanup_preview_note: '预览模式：未执行清理',
     cleanup_errors: '错误：{count}',
     cleanup_invalid_list_title: '<b>失效用户列表：</b>',
+    cleanup_invalid_item: '• 用户 {uid}：话题 {threadId}',
     cleanup_more: '... 还有 {count} 个',
     cleanup_failed: '❌ <b>清理失败</b>\n\n错误信息：{error}\n\n请检查日志或重试。'
   }
@@ -7415,7 +7429,9 @@ async function handleCleanupCommand(message, options = {}, overrideChatId = null
   // 进度与结果发回命令被调用的会话（私聊或群组话题），不再固定发管理员私聊
   const replyTarget = overrideTarget || { chat_id: adminChatId };
   const groupId = getEnv('GROUP_ID');
-  const lang = await getUserLang(adminChatId);
+  // 语言按执行命令的管理员本人 ID 解析（adminChatId 可能是群组会话 ID）
+  const langUserId = message.from?.id ? String(message.from.id) : adminChatId;
+  const lang = await getUserLang(langUserId);
 
   if (!groupId) {
     return sendMessage({
@@ -7536,7 +7552,7 @@ async function handleCleanupCommand(message, options = {}, overrideChatId = null
       // 附加详细信息（最多显示 20 个）
       const detailLimit = Math.min(20, invalidUsers.length);
       const details = invalidUsers.slice(0, detailLimit)
-        .map(u => `• User ${u.userId}: Topic ${u.threadId}`)
+        .map(u => t(lang, 'cleanup_invalid_item', { uid: u.userId, threadId: u.threadId }))
         .join('\n');
 
       const moreText = invalidUsers.length > detailLimit ? `\n${t(lang, 'cleanup_more', { count: invalidUsers.length - detailLimit })}` : '';
@@ -8743,7 +8759,10 @@ async function sendGuestEditNotice(message, chatId, origMessageId, targetChatId)
 async function handleAdminEditedMessage(message) {
   const adminMessageId = message.message_id.toString();
   const adminChatId = message.chat?.id ? String(message.chat.id) : ADMIN_UID;
-  const lang = await getUserLang(adminChatId);
+  // 语言是按“用户”存储的：adminChatId 在话题模式下是群组 ID，不能拿来查语言，
+  // 必须用编辑消息的管理员本人 ID，否则提示文案永远是回退语言。
+  const langUserId = message.from?.id ? String(message.from.id) : adminChatId;
+  const lang = await getUserLang(langUserId);
 
   // 查找管理员回复消息的映射关系
   const replyMapData = await KV.get(`admin-reply-map-${adminChatId}:${adminMessageId}`)
