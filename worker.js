@@ -1,7 +1,7 @@
 /**
  * SafeRelay - Telegram Private Chat Relay Bot
  * 项目地址: https://github.com/qianqi32/SafeRelay
- * 版本: 1.2.1
+ * 版本: 1.3.1
  * 当前版本可能仍不稳定，如遇到 BUG 请提交至 issues 或者直接联系 @KiyukieBot
 */
 
@@ -115,8 +115,8 @@ const I18N = {
     err_auth_error: 'Authentication failed. Please check the configuration',
     err_timeout: 'Request timed out. Please try again later',
     mode_local_quiz: '📝 Local Quiz',
-    mode_turnstile: '☁️ Turnstile',
-    mode_both: '🔒 Quiz + Turnstile',
+    mode_turnstile: '🧩 Web CAPTCHA',
+    mode_both: '🔀 Quiz or CAPTCHA',
     quiz_expired: 'Verification expired. Please request a new question.',
     quiz_max_attempts: 'Too many attempts. Please request a new question.',
     quiz_wrong: 'Wrong answer. {remaining} attempt(s) left.',
@@ -128,7 +128,7 @@ const I18N = {
     quiz_success_msg: '✅ Verification passed! You can now message the admin.',
     quiz_success_pending: '✅ Verification passed!\n\n📩 Your {count} queued message(s) were delivered to the admin.',
     quiz_error: '❌ Something went wrong during verification. Please try again.',
-    verify_mode_switch_failed: '❌ Cannot switch to this mode. Please make sure the Turnstile keys are configured.',
+    verify_mode_switch_failed: '❌ Cannot switch to this mode. Please make sure a web CAPTCHA (TryCap or Turnstile) is configured.',
     verify_mode_switched: 'Switched to: {mode}',
     verify_pending_queued: '📝 Message queued. It will be sent automatically after verification (up to {max} messages).',
     verify_too_frequent: '⏳ Too many verification attempts. Please try again in 5 minutes.',
@@ -152,6 +152,7 @@ const I18N = {
     new_user_method_quiz: 'Local Quiz',
     new_user_method_turnstile: 'Turnstile',
     new_user_method_both: 'Quiz + Turnstile',
+    new_user_method_cap: '🧩 TryCap (Cap)',
     btn_trust_user: '⭐ Trust',
     btn_ban_user: '🚫 Ban',
     toast_newuser_trusted: '⭐ Trusted user {userId}',
@@ -161,7 +162,7 @@ const I18N = {
     panel_topic_redirect: '✨ <b>Topic Mode is on — admin panels run in the group.</b>\n\nOpen the group\'s General topic to use /menu and /help, so every admin works from the same panel.',
     btn_open_group: '💬 Open Group',
     btn_open_profile: '👤 Open Profile',
-    verify_not_configured: 'Turnstile is not configured',
+    verify_not_configured: 'Web CAPTCHA is not configured',
     verify_page_title: 'Human Verification - SafeRelay',
     verify_page_heading: 'Security Verification',
     verify_page_subtitle: 'Please complete the verification below to continue',
@@ -172,6 +173,9 @@ const I18N = {
     verify_page_retry: 'Try Again',
     verify_page_footer: 'Powered by SafeRelay',
     verify_page_loading: 'Verifying...',
+    verify_page_cap_label: '🧩 TryCap — recommended',
+    verify_page_turnstile_label: '☁️ Cloudflare Turnstile — alternative',
+    verify_page_or: 'or',
     spam_topic_name: '🗑️ Spam Bin',
     spam_silently_handled: '🗑️ <b>Spam Message Handled Silently</b>\n\n🆔 UID: <code>{uid}</code>\nTopic ID: <code>{topicId}</code>\n\n<i>The message was moved to the spam topic. The user was not notified.</i>',
     topic_welcome_hint: 'Reply in this topic to respond to the guest.',
@@ -332,8 +336,19 @@ const I18N = {
     verify_title: '🔐 <b>Verification Settings</b>',
     verify_current: 'Current Mode: <b>{mode}</b>',
     verify_options_title: '<b>Available Modes:</b>',
-    verify_options_block: '📝 <b>Local Quiz</b> - Simple built-in questions (default, no setup needed)\n☁️ <b>Turnstile</b> - Cloudflare Turnstile web verification\n🔒 <b>Quiz + Turnstile</b> - Both checks are required',
-    verify_turnstile_missing: '⚠️ <b>Note:</b> No Turnstile configuration was detected, so only Local Quiz is available.\nSet CF_TURNSTILE_SITE_KEY and CF_TURNSTILE_SECRET_KEY in the environment variables to use other modes.',
+    verify_options_block: '📝 <b>Local Quiz</b> - Simple built-in questions (default, no setup needed)\n🧩 <b>Web CAPTCHA</b> - One page with TryCap (recommended) and/or Cloudflare Turnstile; passing either one is enough\n🔀 <b>Quiz or CAPTCHA</b> - Local quiz plus the web CAPTCHA page',
+    verify_turnstile_missing: '⚠️ <b>Note:</b> No web CAPTCHA configuration was detected, so only Local Quiz is available.\nSet CAP_API_ENDPOINT + CAP_SECRET_KEY (TryCap, recommended) or CF_TURNSTILE_SITE_KEY + CF_TURNSTILE_SECRET_KEY in the environment variables to use other modes.',
+    verify_provider_cap: '🧩 TryCap (Cap): {status}',
+    verify_provider_turnstile: '☁️ Cloudflare Turnstile: {status}',
+    status_configured: '✅ Configured',
+    status_not_configured: '❌ Not configured',
+    btn_clear_verified: '🧹 Clear All Verified',
+    btn_clear_verified_confirm: '✅ Confirm Clear',
+    btn_back_verify: '◀️ Back to Verification',
+    clear_verified_title: '⚠️ <b>Clear All Verified Users</b>',
+    clear_verified_confirm: 'There are currently <b>{count}</b> verified user(s).\n\nClearing removes their verified status — each of them will need to pass verification again the next time they message the bot.\n\n⭐ Trusted (whitelisted) users are not affected.',
+    clear_verified_done: '🧹 Cleared verification for {count} user(s). They will need to verify again on their next message.',
+    clear_verified_none: 'There are currently no verified users to clear.',
     union_title: '🌐 <b>Federation Ban Settings</b>',
     union_status: 'Status: {status}',
     union_desc: 'Federation Ban automatically blocks users flagged as malicious by other services.',
@@ -497,8 +512,8 @@ const I18N = {
     err_auth_error: '认证失败，请检查配置',
     err_timeout: '请求超时，请稍后重试',
     mode_local_quiz: '📝 本地题库',
-    mode_turnstile: '☁️ Turnstile',
-    mode_both: '🔒 双重验证',
+    mode_turnstile: '🧩 网页验证',
+    mode_both: '🔀 题库或网页验证',
     quiz_expired: '验证已过期，请重新获取题目',
     quiz_max_attempts: '尝试次数过多，请重新获取题目',
     quiz_wrong: '答案错误，还剩 {remaining} 次机会',
@@ -510,7 +525,7 @@ const I18N = {
     quiz_success_msg: '✅ 验证成功！您现在可以发送消息给管理员了。',
     quiz_success_pending: '✅ 验证成功！\n\n📩 刚才的 {count} 条消息已送达管理员。',
     quiz_error: '❌ 验证处理出错，请重试',
-    verify_mode_switch_failed: '❌ 无法切换到该模式，请确保已配置 Turnstile 密钥',
+    verify_mode_switch_failed: '❌ 无法切换到该模式，请确保已配置网页验证（TryCap 或 Turnstile）',
     verify_mode_switched: '已切换到：{mode}',
     verify_pending_queued: '📝 消息已暂存，完成验证后会自动发送（最多暂存 {max} 条）',
     verify_too_frequent: '⏳ 验证尝试过于频繁，请 5 分钟后再试。',
@@ -534,6 +549,7 @@ const I18N = {
     new_user_method_quiz: '本地题库',
     new_user_method_turnstile: 'Turnstile',
     new_user_method_both: '题库 + Turnstile',
+    new_user_method_cap: '🧩 TryCap (Cap)',
     btn_trust_user: '⭐ 信任',
     btn_ban_user: '🚫 封禁',
     toast_newuser_trusted: '⭐ 已信任用户 {userId}',
@@ -543,7 +559,7 @@ const I18N = {
     panel_topic_redirect: '✨ <b>话题模式已开启，管理面板在群组里使用。</b>\n\n请到群组的 General 话题里使用 /menu 和 /help，这样所有管理员看到的是同一个面板。',
     btn_open_group: '💬 打开群组',
     btn_open_profile: '👤 打开用户资料',
-    verify_not_configured: 'Turnstile 未配置',
+    verify_not_configured: '网页验证未配置',
     verify_page_title: '人机验证 - SafeRelay',
     verify_page_heading: '安全验证',
     verify_page_subtitle: '请完成下方验证以继续对话',
@@ -554,6 +570,9 @@ const I18N = {
     verify_page_retry: '重新验证',
     verify_page_footer: '该界面由 SafeRelay 提供',
     verify_page_loading: '验证中...',
+    verify_page_cap_label: '🧩 TryCap（首选）',
+    verify_page_turnstile_label: '☁️ Cloudflare Turnstile（次选）',
+    verify_page_or: '或',
     spam_topic_name: '🗑️ 垃圾消息回收站',
     spam_silently_handled: '🗑️ <b>垃圾消息已静默处理</b>\n\n🆔 UID: <code>{uid}</code>\n话题 ID: <code>{topicId}</code>\n\n<i>消息已转发到垃圾话题，访客无感知。</i>',
     topic_welcome_hint: '请在此话题内回复访客消息。',
@@ -714,8 +733,19 @@ const I18N = {
     verify_title: '🔐 <b>验证模式设置</b>',
     verify_current: '当前模式：<b>{mode}</b>',
     verify_options_title: '<b>可选模式：</b>',
-    verify_options_block: '📝 <b>本地题库</b> - 使用内置简单题目验证（默认，无需配置）\n☁️ <b>Turnstile</b> - 使用 Cloudflare Turnstile 网页验证\n🔒 <b>双重验证</b> - 需要同时通过两种验证',
-    verify_turnstile_missing: '⚠️ <b>注意：</b> 未检测到 Turnstile 配置，只能使用本地题库验证。\n请在环境变量中配置 CF_TURNSTILE_SITE_KEY 和 CF_TURNSTILE_SECRET_KEY 后使用其他模式。',
+    verify_options_block: '📝 <b>本地题库</b> - 使用内置简单题目验证（默认，无需配置）\n🧩 <b>网页验证</b> - 一个页面同时提供 TryCap（首选）和/或 Cloudflare Turnstile，任过一个即可\n🔀 <b>题库或网页验证</b> - 本地题库 + 网页验证页',
+    verify_turnstile_missing: '⚠️ <b>注意：</b> 未检测到网页验证配置，只能使用本地题库验证。\n请在环境变量中配置 CAP_API_ENDPOINT + CAP_SECRET_KEY（TryCap，首选）或 CF_TURNSTILE_SITE_KEY + CF_TURNSTILE_SECRET_KEY 后使用其他模式。',
+    verify_provider_cap: '🧩 TryCap (Cap)：{status}',
+    verify_provider_turnstile: '☁️ Cloudflare Turnstile：{status}',
+    status_configured: '✅ 已配置',
+    status_not_configured: '❌ 未配置',
+    btn_clear_verified: '🧹 清理所有已验证',
+    btn_clear_verified_confirm: '✅ 确认清理',
+    btn_back_verify: '◀️ 返回验证设置',
+    clear_verified_title: '⚠️ <b>清理所有已验证用户</b>',
+    clear_verified_confirm: '当前共有 <b>{count}</b> 名已验证用户。\n\n清理后将移除他们的验证状态，下次给机器人发消息时需要重新通过验证。\n\n⭐ 信任（白名单）用户不受影响。',
+    clear_verified_done: '🧹 已清理 {count} 名用户的验证状态，他们下次发消息时需要重新验证。',
+    clear_verified_none: '当前没有已验证用户可清理。',
     union_title: '🌐 <b>联合封禁设置</b>',
     union_status: '当前状态：{status}',
     union_desc: '联合封禁可以自动拦截已被其他服务标记为恶意的用户。',
@@ -979,6 +1009,19 @@ function getTurnstileSiteKey() {
 
 function getTurnstileSecretKey() {
   return (getEnv('CF_TURNSTILE_SECRET_KEY') || '').trim();
+}
+
+// TryCap (Cap) 接口地址：实例地址 + 站点密钥，如 https://cap.example.com/abc123/
+// 规范化为以 / 结尾；校验失败（非 https、含引号/尖括号/空白）时视为未配置，避免破坏验证页 HTML
+function getCapApiEndpoint() {
+  const raw = (getEnv('CAP_API_ENDPOINT') || '').trim();
+  if (!raw) return '';
+  if (!raw.startsWith('https://') || /["'<>\s\\]/.test(raw)) return '';
+  return raw.endsWith('/') ? raw : raw + '/';
+}
+
+function getCapSecretKey() {
+  return (getEnv('CAP_SECRET_KEY') || '').trim();
 }
 
 function getTurnstileAllowedHostnames() {
@@ -1693,18 +1736,28 @@ function hasTurnstileConfigured() {
   return !!(site && secret);
 }
 
+// 检查 TryCap (Cap) 是否已配置（接口地址 + 密钥都存在）
+function hasCapConfigured() {
+  return !!(getCapApiEndpoint() && getCapSecretKey());
+}
+
+// 是否配置了任意一个网页 CAPTCHA（TryCap 或 Turnstile，任一即可用网页验证）
+function hasAnyCaptchaConfigured() {
+  return hasTurnstileConfigured() || hasCapConfigured();
+}
+
 // 获取当前验证模式
 async function getVerifyMode() {
   const mode = await KV.get(KV_KEYS.VERIFY_MODE);
-  if (mode === 'turnstile') return hasTurnstileConfigured() ? 'turnstile' : 'local_quiz';
-  if (mode === 'both') return hasTurnstileConfigured() ? 'both' : 'local_quiz';
+  if (mode === 'turnstile') return hasAnyCaptchaConfigured() ? 'turnstile' : 'local_quiz';
+  if (mode === 'both') return hasAnyCaptchaConfigured() ? 'both' : 'local_quiz';
   return 'local_quiz'; // 默认本地题库
 }
 
 // 设置验证模式
 async function setVerifyMode(mode) {
-  if (mode === 'turnstile' && !hasTurnstileConfigured()) return false;
-  if (mode === 'both' && !hasTurnstileConfigured()) return false;
+  if (mode === 'turnstile' && !hasAnyCaptchaConfigured()) return false;
+  if (mode === 'both' && !hasAnyCaptchaConfigured()) return false;
   if (!['local_quiz', 'turnstile', 'both'].includes(mode)) return false;
   await KV.put(KV_KEYS.VERIFY_MODE, mode);
   return true;
@@ -2460,6 +2513,7 @@ async function claimNewUserNotified(userId) {
 }
 
 function newUserMethodLabel(lang, method) {
+  if (method === 'cap') return t(lang, 'new_user_method_cap');
   if (method === 'turnstile') return t(lang, 'new_user_method_turnstile');
   if (method === 'both') return t(lang, 'new_user_method_both');
   return t(lang, 'new_user_method_quiz');
@@ -3950,6 +4004,60 @@ async function getAllVerifiedUsers() {
   }
 }
 
+// 收集当前所有已验证用户的 ID：已验证记录与 verified-<uid> 状态键取并集，
+// 避免只存在于其中一处的用户被漏掉（例如状态键还在、记录已被清理）。
+async function collectVerifiedUserIds() {
+  const uidSet = new Set();
+
+  // (a) 已验证用户记录（verified-user:<uid> 单条记录 + 旧版列表，已由 getAllVerifiedUsers 合并）
+  for (const [userId] of await getAllVerifiedUsers()) {
+    uidSet.add(String(userId));
+  }
+
+  // (b) 状态键扫描 verified-<uid>。注意同一前缀也会命中记录键 verified-user:<uid>，
+  // 因此只接受纯数字后缀，避免把记录键误当成状态键。
+  let cursor;
+  do {
+    const result = await KV.list({ prefix: 'verified-', cursor, limit: 1000 });
+    for (const key of result.keys) {
+      const suffix = key.name.slice('verified-'.length);
+      if (/^\d+$/.test(suffix)) uidSet.add(suffix);
+    }
+    cursor = result.list_complete ? null : result.cursor;
+  } while (cursor);
+
+  return uidSet;
+}
+
+// 清理所有已验证状态：被清理的访客下次发消息时需重新通过验证。
+// 信任（白名单）用户走独立名单，不受影响；用户资料、话题、封禁数据均不触碰。
+async function clearAllVerified() {
+  const uidSet = await collectVerifiedUserIds();
+
+  // 删除每个用户的验证状态键，并失效内存 / Cache API 缓存
+  for (const userId of uidSet) {
+    await safeKvDelete(`verified-${userId}`);
+    await invalidateCache(`verified-${userId}`);
+  }
+
+  // 重置已验证用户记录：先收集全部单条记录键名再统一删除
+  // （边删边分页会因游标偏移漏删），并删除旧版列表，getAllVerifiedUsers 随后返回空
+  const recordKeys = [];
+  let cursor;
+  do {
+    const result = await KV.list({ prefix: VERIFIED_USER_PREFIX, cursor, limit: 1000 });
+    for (const key of result.keys) recordKeys.push(key.name);
+    cursor = result.list_complete ? null : result.cursor;
+  } while (cursor);
+  for (const name of recordKeys) {
+    await KV.delete(name);
+  }
+  await safeKvDelete(LEGACY_VERIFIED_USERS_KEY);
+
+  Logger.info('clear_all_verified', { count: uidSet.size });
+  return uidSet.size;
+}
+
 // 配置管理
 const CONFIG_KEYS = {
   WELCOME_MSG: 'config:welcome_msg',
@@ -5368,9 +5476,13 @@ async function generateForwardModeSubmenu(lang) {
 async function generateVerifySubmenu(lang) {
   const L = normalizeLang(lang) || getDefaultLang();
   const currentMode = await getVerifyMode();
+  const capAvailable = hasCapConfigured();
   const turnstileAvailable = hasTurnstileConfigured();
-  let text = `${t(L, 'verify_title')}\n\n${t(L, 'verify_current', { mode: getVerifyModeName(currentMode, L) })}\n\n${t(L, 'verify_options_title')}\n${t(L, 'verify_options_block')}\n`;
-  if (!turnstileAvailable) {
+  let text = `${t(L, 'verify_title')}\n\n${t(L, 'verify_current', { mode: getVerifyModeName(currentMode, L) })}\n`;
+  text += `${t(L, 'verify_provider_cap', { status: capAvailable ? t(L, 'status_configured') : t(L, 'status_not_configured') })}\n`;
+  text += `${t(L, 'verify_provider_turnstile', { status: turnstileAvailable ? t(L, 'status_configured') : t(L, 'status_not_configured') })}\n`;
+  text += `\n${t(L, 'verify_options_title')}\n${t(L, 'verify_options_block')}\n`;
+  if (!capAvailable && !turnstileAvailable) {
     text += `\n${t(L, 'verify_turnstile_missing')}`;
   }
   const keyboard = {
@@ -5378,10 +5490,28 @@ async function generateVerifySubmenu(lang) {
       [{ text: (currentMode === 'local_quiz' ? '✅ ' : '') + t(L, 'mode_local_quiz'), callback_data: 'verify_mode:local_quiz' }],
       [{ text: (currentMode === 'turnstile' ? '✅ ' : '') + t(L, 'mode_turnstile'), callback_data: 'verify_mode:turnstile' }],
       [{ text: (currentMode === 'both' ? '✅ ' : '') + t(L, 'mode_both'), callback_data: 'verify_mode:both' }],
+      [{ text: t(L, 'btn_clear_verified'), callback_data: 'clear_verified_ask' }],
       [{ text: t(L, 'btn_back_main'), callback_data: 'back_to_main' }]
     ]
   };
   return { text, reply_markup: keyboard };
+}
+
+
+// 生成「清理所有已验证」确认视图（破坏性操作，需二次确认）
+async function generateClearVerifiedConfirm(lang) {
+  const L = normalizeLang(lang) || getDefaultLang();
+  const count = (await collectVerifiedUserIds()).size;
+  const buttons = [];
+  let text;
+  if (count > 0) {
+    text = `${t(L, 'clear_verified_title')}\n\n${t(L, 'clear_verified_confirm', { count })}`;
+    buttons.push([{ text: t(L, 'btn_clear_verified_confirm'), callback_data: 'clear_verified_do' }]);
+  } else {
+    text = `${t(L, 'clear_verified_title')}\n\n${t(L, 'clear_verified_none')}`;
+  }
+  buttons.push([{ text: t(L, 'btn_cancel'), callback_data: 'submenu_verify' }]);
+  return { text, reply_markup: { inline_keyboard: buttons } };
 }
 
 
@@ -5661,6 +5791,39 @@ async function handleAdminCallback(callbackQuery) {
       text: menu.text,
       parse_mode: 'HTML',
       reply_markup: menu.reply_markup
+    });
+    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id });
+  }
+
+  // 验证设置 - 清理所有已验证（先进入二次确认视图）
+  if (data === 'clear_verified_ask') {
+    const view = await generateClearVerifiedConfirm(lang);
+    await requestTelegram('editMessageText', {
+      chat_id: chatId,
+      message_id: messageId,
+      text: view.text,
+      parse_mode: 'HTML',
+      reply_markup: view.reply_markup
+    });
+    return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id });
+  }
+
+  // 验证设置 - 确认清理所有已验证
+  if (data === 'clear_verified_do') {
+    const count = await clearAllVerified();
+    const text = count > 0
+      ? t(lang, 'clear_verified_done', { count })
+      : t(lang, 'clear_verified_none');
+    await requestTelegram('editMessageText', {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: t(lang, 'btn_back_verify'), callback_data: 'submenu_verify' }]
+        ]
+      }
     });
     return requestTelegram('answerCallbackQuery', { callback_query_id: callbackQuery.id });
   }
@@ -7515,13 +7678,16 @@ async function handleVerification(message, chatId, origin) {
 // 渲染验证页面
 function handleVerifyPage(request) {
   const siteKey = getTurnstileSiteKey();
+  const capEndpoint = getCapApiEndpoint();
+  const capConfigured = !!capEndpoint;
+  const turnstileConfigured = !!siteKey;
   const url = new URL(request.url);
   const sessionId = url.searchParams.get('session');
   const sessionSignature = url.searchParams.get('sig');
   const pageLang = normalizeLang(url.searchParams.get('lang')) || 'en';
   const htmlLang = pageLang === 'zh' ? 'zh-CN' : 'en';
 
-  if (!siteKey) {
+  if (!capConfigured && !turnstileConfigured) {
     return new Response(t(pageLang, 'verify_not_configured'), {
       status: 503,
       headers: { 'content-type': 'text/plain;charset=UTF-8' }
@@ -7546,8 +7712,43 @@ function handleVerifyPage(request) {
     errorDesc: t(pageLang, 'verify_page_error_desc'),
     retry: t(pageLang, 'verify_page_retry'),
     footer: t(pageLang, 'verify_page_footer'),
-    loading: t(pageLang, 'verify_page_loading')
+    loading: t(pageLang, 'verify_page_loading'),
+    capLabel: t(pageLang, 'verify_page_cap_label'),
+    turnstileLabel: t(pageLang, 'verify_page_turnstile_label'),
+    orText: t(pageLang, 'verify_page_or')
   };
+
+  // 供应商脚本：只加载已配置的（TryCap 首选在前，Turnstile 次选）
+  const providerScripts = [
+    capConfigured ? '<script src="https://cdn.jsdelivr.net/npm/cap-widget@latest"></script>' : '',
+    turnstileConfigured ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>' : ''
+  ].filter(Boolean).join('\n      ');
+
+  // TryCap 区块（首选，排在最前）
+  const capSection = capConfigured ? `
+              <div class="mb-6">
+                  <p class="text-secondary text-sm font-medium mb-3">${pageText.capLabel}</p>
+                  <div class="turnstile-container">
+                      <cap-widget id="cap-widget" data-cap-api-endpoint="${capEndpoint}"></cap-widget>
+                  </div>
+              </div>` : '';
+
+  // 两个供应商同时存在时显示「或」分隔线：任过一个即可
+  const providerDivider = (capConfigured && turnstileConfigured) ? `
+              <div class="flex items-center gap-3 mb-6" aria-hidden="true">
+                  <span class="flex-1 border-t border-slate-300"></span>
+                  <span class="text-secondary text-xs font-medium">${pageText.orText}</span>
+                  <span class="flex-1 border-t border-slate-300"></span>
+              </div>` : '';
+
+  // Turnstile 区块（次选）
+  const turnstileSection = turnstileConfigured ? `
+              <div class="mb-6">
+                  <p class="text-secondary text-sm font-medium mb-3">${pageText.turnstileLabel}</p>
+                  <div class="turnstile-container">
+                      <div id="turnstile-widget" class="cf-turnstile" data-sitekey="${siteKey}" data-callback="onVerify" data-theme="auto"></div>
+                  </div>
+              </div>` : '';
 
   const html = `
   <!DOCTYPE html>
@@ -7556,7 +7757,7 @@ function handleVerifyPage(request) {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>${pageText.title}</title>
-      <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+      ${providerScripts}
       <script src="https://telegram.org/js/telegram-web-app.js"></script>
       <script src="https://cdn.tailwindcss.com"></script>
       <style>
@@ -7704,9 +7905,11 @@ function handleVerifyPage(request) {
               <h1 class="text-primary text-xl md:text-2xl font-semibold mb-2 transition-colors duration-300">${pageText.heading}</h1>
               <p class="text-secondary text-sm md:text-base mb-8 transition-colors duration-300">${pageText.subtitle}</p>
               
-              <!-- Turnstile widget -->
-              <div id="verify-section" class="turnstile-container mb-6">
-                  <div id="turnstile-widget" class="cf-turnstile" data-sitekey="${siteKey}" data-callback="onVerify" data-theme="auto"></div>
+              <!-- CAPTCHA widgets: TryCap first (recommended), Turnstile second; passing either one is enough -->
+              <div id="verify-section" class="mb-6">
+                  ${capSection}
+                  ${providerDivider}
+                  ${turnstileSection}
               </div>
               
               <!-- Loading state -->
@@ -7809,16 +8012,20 @@ function handleVerifyPage(request) {
               // 显示验证区域
               document.getElementById('verify-section').classList.remove('hidden');
               
-              // 重置 Turnstile
+              // 重置已配置的 CAPTCHA 组件
+              const capWidgetEl = document.getElementById('cap-widget');
+              if (capWidgetEl && typeof capWidgetEl.reset === 'function') {
+                  try { capWidgetEl.reset(); } catch (e) { /* ignore */ }
+              }
               if (typeof turnstile !== 'undefined') {
                   turnstile.reset();
-              } else {
-                  // 如果 Turnstile API 不可用，刷新页面
+              } else if (!capWidgetEl) {
+                  // 没有可重置的组件时，刷新页面
                   window.location.reload();
               }
           }
 
-          function onVerify(token) {
+          function onVerify(token, provider) {
               const urlParams = new URLSearchParams(window.location.search);
               const session = urlParams.get('session');
               const signature = urlParams.get('sig');
@@ -7851,7 +8058,7 @@ function handleVerifyPage(request) {
               fetch('/verify-callback', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ token, session, signature, userInfo })
+                  body: JSON.stringify({ token, session, signature, userInfo, provider: provider || 'turnstile' })
               })
               .then(response => {
                   if (response.ok) {
@@ -7884,6 +8091,14 @@ function handleVerifyPage(request) {
               document.getElementById('verify-section').classList.add('hidden');
               document.getElementById('error-msg').classList.remove('hidden');
           }
+
+          // TryCap (Cap)：求解成功后 widget 触发 solve 事件，事件里带一次性 token
+          const capWidget = document.getElementById('cap-widget');
+          if (capWidget) {
+              capWidget.addEventListener('solve', function(e) {
+                  onVerify(e.detail.token, 'cap');
+              });
+          }
       </script>
   </body>
   </html>
@@ -7900,7 +8115,7 @@ async function handleVerifyCallback(request) {
   }
 
   try {
-    const { token, session, signature, userInfo } = await request.json();
+    const { token, session, signature, userInfo, provider } = await request.json();
 
     if (!token || !session || !signature) {
       return new Response('Missing token or session', { status: 400 });
@@ -7912,35 +8127,57 @@ async function handleVerifyCallback(request) {
     }
 
     const uid = sessionInfo.userId;
-    const secretKey = getTurnstileSecretKey();
-    if (!secretKey) {
-      return new Response('Turnstile not configured', { status: 503 });
-    }
+    // 验证供应商：'cap' = TryCap；缺省/其他值按 Turnstile 处理（向后兼容旧版验证页）
+    const verifyProvider = provider === 'cap' ? 'cap' : 'turnstile';
 
-    const formData = new FormData();
-    formData.append('secret', secretKey);
-    formData.append('response', token);
+    if (verifyProvider === 'cap') {
+      // ===== TryCap (Cap)：自托管实例 siteverify，token 一次性 =====
+      if (!hasCapConfigured()) {
+        return new Response('TryCap not configured', { status: 503 });
+      }
 
-    const result = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-      method: 'POST',
-      body: formData
-    }).then(r => r.json());
+      const capResult = await fetch(getCapApiEndpoint() + 'siteverify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret: getCapSecretKey(), response: token })
+      }).then(r => r.json()).catch(() => null);
 
-    if (!result.success) {
-      Logger.warn('turnstile_verification_failed', { userId: uid, errors: result['error-codes'] });
-      return new Response('Verification failed', { status: 400 });
-    }
+      if (!capResult || !capResult.success) {
+        Logger.warn('cap_verification_failed', { userId: uid });
+        return new Response('Verification failed', { status: 400 });
+      }
+    } else {
+      // ===== Cloudflare Turnstile =====
+      const secretKey = getTurnstileSecretKey();
+      if (!secretKey) {
+        return new Response('Turnstile not configured', { status: 503 });
+      }
 
-    const allowedHostnames = getTurnstileAllowedHostnames();
-    if (allowedHostnames.length && (!result.hostname || !allowedHostnames.includes(result.hostname))) {
-      Logger.warn('turnstile_hostname_mismatch', { userId: uid, hostname: result.hostname });
-      return new Response('Hostname mismatch', { status: 400 });
-    }
+      const formData = new FormData();
+      formData.append('secret', secretKey);
+      formData.append('response', token);
 
-    const expectedAction = getTurnstileExpectedAction();
-    if (expectedAction && result.action && result.action !== expectedAction) {
-      Logger.warn('turnstile_action_mismatch', { userId: uid, action: result.action, expected: expectedAction });
-      return new Response('Action mismatch', { status: 400 });
+      const result = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        method: 'POST',
+        body: formData
+      }).then(r => r.json());
+
+      if (!result.success) {
+        Logger.warn('turnstile_verification_failed', { userId: uid, errors: result['error-codes'] });
+        return new Response('Verification failed', { status: 400 });
+      }
+
+      const allowedHostnames = getTurnstileAllowedHostnames();
+      if (allowedHostnames.length && (!result.hostname || !allowedHostnames.includes(result.hostname))) {
+        Logger.warn('turnstile_hostname_mismatch', { userId: uid, hostname: result.hostname });
+        return new Response('Hostname mismatch', { status: 400 });
+      }
+
+      const expectedAction = getTurnstileExpectedAction();
+      if (expectedAction && result.action && result.action !== expectedAction) {
+        Logger.warn('turnstile_action_mismatch', { userId: uid, action: result.action, expected: expectedAction });
+        return new Response('Action mismatch', { status: 400 });
+      }
     }
 
     await consumeTurnstileSession(session);
@@ -7965,12 +8202,12 @@ async function handleVerifyCallback(request) {
       await upsertUserProfileFromUpdate(userInfo);
     }
 
-    const turnstileVerifyMode = await getVerifyMode();
-    const turnstileMethod = turnstileVerifyMode === 'both' ? 'both' : 'turnstile';
-    markPendingVerifyMethod(uid, turnstileMethod);
+    const webVerifyMode = await getVerifyMode();
+    const webMethod = verifyProvider === 'cap' ? 'cap' : (webVerifyMode === 'both' ? 'both' : 'turnstile');
+    markPendingVerifyMethod(uid, webMethod);
 
     const pendingResult = await processPendingMessagesAfterVerification(uid);
-    Logger.info('turnstile_verification_success', { userId: uid, pendingForwarded: pendingResult.forwarded });
+    Logger.info('web_captcha_verification_success', { userId: uid, provider: verifyProvider, pendingForwarded: pendingResult.forwarded });
 
     const guestLang = await getUserLang(uid);
     let successMsg = t(guestLang, 'turnstile_success');
@@ -7983,7 +8220,7 @@ async function handleVerifyCallback(request) {
     });
 
     // 新用户接入通知（统一走 notifyNewUserVerified：按转发模式路由 + 去重）
-    await notifyNewUserVerified(uid, userInfo || await getUserProfile(uid), turnstileMethod);
+    await notifyNewUserVerified(uid, userInfo || await getUserProfile(uid), webMethod);
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,

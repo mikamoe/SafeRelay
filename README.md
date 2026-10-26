@@ -6,7 +6,7 @@
 
 ## Private Chat Relay Bot — Anti-Harassment · Zero Cost · Serverless
 
-*v1.2.1 — polished ✨ emoji set, tighter menus & cards, bilingual UI (EN default / 简体中文)*
+*v1.3.1 — 🧩 TryCap (Cap) joins Turnstile as a second web CAPTCHA (passing either one is enough), 🧹 one-tap "Clear All Verified" in the verification menu, bilingual UI (EN default / 简体中文)*
 
 [![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow?logo=javascript&logoColor=white)](https://developer.mozilla.org/docs/Web/JavaScript) [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare%20Workers-100K%2Fday-orange?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/) [![Telegram Bot](https://img.shields.io/badge/Telegram%20Bot-API%208.0+-blue?logo=telegram&logoColor=white)](https://core.telegram.org/bots/api) [![License](https://img.shields.io/badge/License-GPL--3.0-green)](LICENSE)
 
@@ -21,7 +21,7 @@
 | Module | Description |
 | ---- | ---- |
 | **Message Relay** | Two-way guest ↔ admin forwarding, with edit sync and forum topic mode |
-| **Human Verification** | Cloudflare Turnstile + local quiz, effective against bots |
+| **Human Verification** | Web CAPTCHA page with TryCap (Cap, primary) and Cloudflare Turnstile (alternative) — passing either one is enough — plus a local quiz, effective against bots; admins can clear all verified users from the verification menu (they re-verify on their next message) |
 | **Federation Ban** | Shared ban list: a user banned once is blocked everywhere |
 | **Fraud Detection** | Local fraud database checked in real time |
 | **Trusted List** | Trusted guests skip all checks and are forwarded directly |
@@ -52,7 +52,17 @@ After it deploys, you only need to:
 2. Activate the webhook once (one `curl` command — see [DEPLOY.md](./DEPLOY.md)).
 3. Send `/start` to your bot. Done.
 
-Turnstile, topic mode and AI detection are all **optional** — the default local quiz works with zero extra setup. Full guide (one-click + manual path + options): **[DEPLOY.md](./DEPLOY.md)**.
+Web CAPTCHA (TryCap / Turnstile), topic mode and AI detection are all **optional** — the default local quiz works with zero extra setup. Full guide (one-click + manual path + options): **[DEPLOY.md](./DEPLOY.md)**.
+
+**Optional web CAPTCHA variables** (only needed for web verification; the local quiz needs none):
+
+| Variable | Required | Description |
+| ---- | ---- | ---- |
+| `CAP_API_ENDPOINT` | Optional | TryCap (Cap) endpoint including the site key, e.g. `https://cap.example.com/<site-key>/`. Requires a self-hosted [Cap Standalone](https://trycap.dev/guide/) instance. This is the **primary** web CAPTCHA. |
+| `CAP_SECRET_KEY` | Optional | TryCap secret key from your Cap dashboard (not the instance `ADMIN_KEY`) |
+| `CF_TURNSTILE_SITE_KEY` + `CF_TURNSTILE_SECRET_KEY` | Optional | Cloudflare Turnstile keys — the **alternative** web CAPTCHA |
+
+If both CAPTCHAs are configured, the verification page shows both and passing **either one** completes verification.
 
 ---
 
@@ -88,6 +98,7 @@ SafeRelay uses one consistent emoji set across all menus and messages:
 | 🌍 | Language | 🟢 / 🔴 | On / off |
 | ✅ | Success | ❌ | Error / cancel |
 | ⚠️ | Warning | ◀️ / 🔄 | Back / Refresh |
+| 🧩 | Web CAPTCHA (TryCap) | 🔀 | Quiz or CAPTCHA mode |
 
 ---
 
@@ -173,7 +184,7 @@ The bot then creates a topic for each new guest and forwards their messages ther
 - **Federation ban** — shared ban system blocks known malicious users
 - **Fraud detection** — local fraud database, checked in real time
 - **Anti-flood protection** — at most 5 messages within 5 seconds
-- **Human verification** — Cloudflare Turnstile keeps bots out
+- **Human verification** — TryCap (Cap) / Cloudflare Turnstile web CAPTCHA keeps bots out
 - **Log redaction** — tokens, secrets, and signatures are filtered from logs automatically
 
 ---
@@ -204,6 +215,7 @@ The bot then creates a topic for each new guest and forwards their messages ther
 - Telegram Bot API
 - Cloudflare Workers + KV + Cache API
 - Cloudflare Turnstile
+- TryCap (Cap) — optional, self-hosted CAPTCHA
 
 ---
 
@@ -240,7 +252,7 @@ SafeRelay/
 | 模块 | 说明 |
 | ---- | ---- |
 | **消息中转** | 访客 ↔ 管理员双向转发，支持编辑同步与话题模式 |
-| **人机验证** | Cloudflare Turnstile + 本地题库双重验证，有效拦截机器人 |
+| **人机验证** | 网页验证页同时提供 TryCap（Cap，首选）与 Cloudflare Turnstile（次选），任过一个即可，再加本地题库，有效拦截机器人；管理员可在验证菜单一键清理所有已验证用户（其下次发消息时需重新验证） |
 | **联合封禁** | 接入中心化封禁系统，恶意用户一次封禁全网拦截 |
 | **欺诈检测** | 本地欺诈数据库实时比对，自动识别可疑用户 |
 | **信任名单** | 信任用户跳过所有检查，直接转发 |
@@ -261,7 +273,9 @@ SafeRelay/
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/mikamoe/SafeRelay)
 
-Turnstile、话题模式、AI 检测均为可选功能，默认本地题库开箱即用。完整教程（一键 + 手动 + 可选项）：**[DEPLOY.md](./DEPLOY.md)**。
+网页验证（TryCap / Turnstile）、话题模式、AI 检测均为可选功能，默认本地题库开箱即用。完整教程（一键 + 手动 + 可选项）：**[DEPLOY.md](./DEPLOY.md)**。
+
+网页 CAPTCHA 可选变量：`CAP_API_ENDPOINT` + `CAP_SECRET_KEY`（TryCap，首选，需自建 [Cap Standalone](https://trycap.dev/guide/) 实例；密钥是 Cap 后台的站点密钥，不是实例的 `ADMIN_KEY`），或 `CF_TURNSTILE_SITE_KEY` + `CF_TURNSTILE_SECRET_KEY`（Cloudflare Turnstile，次选）。两个都配时，验证页会同时显示两个选项，任过一个即可完成验证。
 
 ### 语言说明
 

@@ -1,7 +1,7 @@
 # SafeRelay - 部署指南
 
 > ⚡ **推荐一键部署：约 3 分钟。** 你只需要准备 3 个值，其余（创建 Worker、创建 KV、部署代码）Cloudflare 全自动完成。
-> Turnstile、话题模式、AI 检测都是**可选**功能，不配也能正常用——默认的本地题库验证开箱即用。
+> 网页验证（TryCap / Turnstile）、话题模式、AI 检测都是**可选**功能，不配也能正常用——默认的本地题库验证开箱即用。
 
 ---
 
@@ -87,13 +87,24 @@ Invoke-WebRequest -Method POST -Uri "https://<你的 Worker 地址>/registerWebh
 
 ## 🎛 可选功能（按需再看，不配不影响使用）
 
-### Turnstile 网页验证（可选，默认关）
+### 🧩 TryCap (Cap) CAPTCHA（可选，网页验证首选）
 
-默认验证是本地题库（答一道简单题），无需任何配置。想要 Cloudflare Turnstile 网页验证时再配：
+默认验证是本地题库（答一道简单题），无需任何配置。想要网页验证时，首选自托管的 [TryCap (Cap)](https://trycap.dev/guide/)——开源、免费、无第三方依赖：
+
+1. 在你自己的服务器上跑 **Cap Standalone**：用官方文档（https://trycap.dev/guide/）提供的 docker-compose 部署（或点文档里的 Railway 一键部署按钮），并给实例设置一个强 `ADMIN_KEY`。
+2. 打开你的 Cap 实例后台，用 `ADMIN_KEY` 登录，创建一个站点（site key），得到 **site key** 和 **secret key**。
+3. 给 Worker 加两个变量：`CAP_API_ENDPOINT` = `https://<你的 Cap 实例>/<site-key>/`（注意末尾的 `/`），`CAP_SECRET_KEY` = 上一步的 secret key。**不要填 ADMIN_KEY**——这是最常见的错误，ADMIN_KEY 只是实例后台的登录密码。
+4. 给机器人发 `/menu → 🔐 验证模式`，切到「🧩 网页验证」或「🔀 题库或网页验证」。
+
+> 如果同时也配了下面的 Turnstile，验证页会同时显示两个选项，访客**任过一个**即可完成验证。
+
+### Turnstile 网页验证（可选，默认关，次选）
+
+想要 Cloudflare Turnstile 网页验证时再配：
 
 1. `Cloudflare → 应用程序安全 → Turnstile → 添加小组件`，主机名填你的 Worker 域名，创建后拿到 **站点密钥** 和 **密钥**。
 2. 给 Worker 加两个密钥变量：`CF_TURNSTILE_SITE_KEY`、`CF_TURNSTILE_SECRET_KEY`。
-3. 给机器人发 `/menu → 🛡️ 验证模式`，切到 Turnstile 或双重验证。
+3. 给机器人发 `/menu → 🔐 验证模式`，切到「🧩 网页验证」或「🔀 题库或网页验证」。
 
 ### 话题模式（可选）
 
@@ -112,6 +123,8 @@ Invoke-WebRequest -Method POST -Uri "https://<你的 Worker 地址>/registerWebh
 
 | 变量 | 说明 |
 | --- | --- |
+| `CAP_API_ENDPOINT` | TryCap (Cap) 接口地址（含站点密钥），如 `https://cap.example.com/<site-key>/`；网页验证首选，需自建 Cap Standalone 实例 |
+| `CAP_SECRET_KEY` | TryCap 站点密钥（在 Cap 后台创建站点时生成；**不是** 实例的 `ADMIN_KEY`） |
 | `ADMIN_IDS` | 多管理员 ID，英文逗号分隔（如 `111,222`）；不能替代必填的 `ENV_ADMIN_UID` |
 | `DEFAULT_LANG` | 默认语言：`en`（默认）/ `zh`；别名 `BOT_LANG`。用户仍可 `/language` 单独切换 |
 | `VERIFY_SIGNING_SECRET` | 验证链接签名密钥；不设时默认用 `ENV_BOT_SECRET` |
