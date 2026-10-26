@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/banner.webp" alt="SafeRelay — 安全中转 · 私聊守护" width="100%">
+
 # SafeRelay
 
 ## Private Chat Relay Bot — Anti-Harassment · Zero Cost · Serverless
@@ -214,6 +216,8 @@ SafeRelay/
 ├── DEPLOY.md          # Deployment guide
 ├── README.md          # This document
 ├── LICENSE            # GPL-3.0 license
+├── assets/
+│   └── banner.webp    # README banner artwork
 └── data/
     └── fraud.db       # Fraud user database
 ```
