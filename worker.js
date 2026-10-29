@@ -1,7 +1,7 @@
 /**
  * SafeRelay - Telegram Private Chat Relay Bot
  * 项目地址: https://github.com/qianqi32/SafeRelay
- * 版本: 1.3.3
+ * 版本: 1.3.4
  * 当前版本可能仍不稳定，如遇到 BUG 请提交至 issues 或者直接联系 @KiyukieBot
 */
 
@@ -96,6 +96,7 @@ const I18N = {
     admin_fraud_detected: '🚨 <b>Fraudulent User Detected</b>\n\n🆔 UID: <code>{uid}</code>\nThis user is in the fraud database and was blocked automatically.',
     guest_spam_blocked: '🚫 Your message broke the rules and was blocked. Questions? Contact the admin.',
     guest_spam_fake_sent: '✅ Message sent',
+    send_success_notice: '✅ Sent successfully',
     admin_spam_intercepted: '🧹 <b>Spam Message Blocked</b>\n\n🆔 UID: <code>{uid}</code>\nReason: {reason}\n\n<i>The message was blocked and not forwarded to the admin.</i>',
     guest_rate_limited: '⏳ Too fast — please wait {seconds}s and try again.',
     spam_reason_links: 'Too many links ({count}/{max})',
@@ -494,6 +495,7 @@ const I18N = {
     admin_fraud_detected: '🚨 <b>检测到欺诈用户</b>\n\n🆔 UID: <code>{uid}</code>\n该用户出现在欺诈数据库中，已自动拦截。',
     guest_spam_blocked: '🚫 消息因违规被拦截。如有疑问，请联系管理员。',
     guest_spam_fake_sent: '✅ 消息已发送',
+    send_success_notice: '✅ 发送成功',
     admin_spam_intercepted: '🧹 <b>垃圾消息拦截</b>\n\n🆔 UID: <code>{uid}</code>\n原因：{reason}\n\n<i>消息已拦截，未转发给管理员。</i>',
     guest_rate_limited: '⏳ 发送过于频繁，请等待 {seconds} 秒后再试。',
     spam_reason_links: '链接过多 ({count}/{max})',
@@ -4713,6 +4715,24 @@ function copyMessage(msg = {}) {
   return requestTelegram('copyMessage', msg);
 }
 
+// 发送成功临时通知：消息送达后在发送方会话里提示「✅ 发送成功」，1 秒后自动删除。
+// 只做送达反馈：通知本身发送/删除失败都静默忽略，不影响主流程结果。
+async function sendEphemeralSendSuccessNotice(target, lang) {
+  if (!target || !target.chat_id) return;
+  try {
+    const notice = await sendMessage({ ...target, text: t(lang, 'send_success_notice') });
+    const noticeMessageId = notice?.result?.message_id;
+    if (!noticeMessageId) return;
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    await requestTelegram('deleteMessage', {
+      chat_id: target.chat_id,
+      message_id: noticeMessageId
+    }).catch(() => null);
+  } catch (e) {
+    Logger.warn('send_success_notice_failed', e, { chatId: target.chat_id });
+  }
+}
+
 async function forwardMessage(msg = {}) {
   const result = await requestTelegram('forwardMessage', msg);
   if (shouldFallbackToCopy(result)) {
@@ -7422,6 +7442,8 @@ async function handleAdminMessage(message) {
             { chat_id: String(guestChatId), message_id: copyReq.result.message_id }
           );
         }
+        // 送达后在管理员当前会话（私聊或话题）里给一个临时「✅ 发送成功」提示，1 秒后自动删除
+        await sendEphemeralSendSuccessNotice(getReplyTarget(), lang);
       }
 
       return copyReq;
@@ -8310,15 +8332,24 @@ async function handleGuestMessage(message) {
   Logger.info('handle_guest_message_before_media_group', { userId, hasTopicContext: !!topicContext });
   return handleMediaGroup(message, async (messages) => {
     Logger.info('handle_guest_message_in_media_group', { userId, messageCount: messages.length });
+    let result = null;
     if (topicContext && topicContext.threadId) {
       const topicResult = await forwardMessagesToTopic(messages, userId, topicContext.threadId);
       Logger.info('handle_guest_message_topic_forward_result', { userId, ok: topicResult?.ok });
       if (topicResult?.ok) {
-        return topicResult;
+        result = topicResult;
       }
     }
-    Logger.info('handle_guest_message_forwarding_to_admin', { userId });
-    return forwardMessagesToAdmin(messages, userId);
+    if (!result) {
+      Logger.info('handle_guest_message_forwarding_to_admin', { userId });
+      result = await forwardMessagesToAdmin(messages, userId);
+    }
+    if (result?.ok) {
+      // 送达后给访客一个临时「✅ 发送成功」提示，1 秒后自动删除（相册只提示一次）
+      const guestLang = await getUserLang(userId);
+      await sendEphemeralSendSuccessNotice({ chat_id: userId }, guestLang);
+    }
+    return result;
   });
 }
 
