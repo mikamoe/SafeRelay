@@ -1,7 +1,7 @@
 /**
  * SafeRelay - Telegram Private Chat Relay Bot
  * 项目地址: https://github.com/qianqi32/SafeRelay
- * 版本: 1.3.4
+ * 版本: 1.3.5
  * 当前版本可能仍不稳定，如遇到 BUG 请提交至 issues 或者直接联系 @KiyukieBot
 */
 
@@ -2278,12 +2278,12 @@ async function restoreMessageFromSpamTopic(groupId, spamTopicId, targetTopicId, 
 }
 
 // ========== 用户话题管理 ==========
-async function ensureUserTopic(userId, profile = null) {
+async function ensureUserTopic(userId, profile = null, options = {}) {
   const inFlightKey = String(userId);
   const inFlight = topicCreateInFlight.get(inFlightKey);
   if (inFlight) return inFlight;
 
-  const promise = ensureUserTopicInternal(userId, profile);
+  const promise = ensureUserTopicInternal(userId, profile, options);
   topicCreateInFlight.set(inFlightKey, promise);
   try {
     return await promise;
@@ -2294,7 +2294,7 @@ async function ensureUserTopic(userId, profile = null) {
   }
 }
 
-async function ensureUserTopicInternal(userId, profile = null) {
+async function ensureUserTopicInternal(userId, profile = null, options = {}) {
   if (!GROUP_ID) {
     Logger.warn('ensure_user_topic_no_group_id', { userId });
     return null;
@@ -2345,7 +2345,7 @@ async function ensureUserTopicInternal(userId, profile = null) {
     }
 
     Logger.info('ensure_user_topic_creating_thread', { userId });
-    const threadId = await createUserTopicThread(userId, profile);
+    const threadId = await createUserTopicThread(userId, profile, options);
     Logger.info('ensure_user_topic_thread_created', { userId, threadId });
     if (!threadId) {
       return null;
@@ -2401,7 +2401,7 @@ async function invalidateUserTopicMapping(userId, threadId = null) {
   }
 }
 
-async function createUserTopicThread(userId, profile = null) {
+async function createUserTopicThread(userId, profile = null, options = {}) {
   if (!GROUP_ID) {
     Logger.error('create_user_topic_no_group_id', { userId });
     return null;
@@ -2440,10 +2440,13 @@ async function createUserTopicThread(userId, profile = null) {
     const threadId = response.result.message_thread_id;
     Logger.info('create_user_topic_got_thread_id', { userId, threadId });
 
-    try {
-      await sendTopicWelcomeMessage(threadId, userId, profile);
-    } catch (welcomeErr) {
-      Logger.warn('send_topic_welcome_failed', welcomeErr, { userId, threadId });
+    // options.welcome === false 时跳过欢迎卡（如屏蔽提醒触发建话题，不该发新用户接入卡）
+    if (options.welcome !== false) {
+      try {
+        await sendTopicWelcomeMessage(threadId, userId, profile);
+      } catch (welcomeErr) {
+        Logger.warn('send_topic_welcome_failed', welcomeErr, { userId, threadId });
+      }
     }
 
     Logger.info('user_topic_created', { userId, threadId, topicTitle });
@@ -2614,16 +2617,20 @@ async function notifyNewUserVerified(userId, profile, method) {
         // 话题早已存在（或欢迎卡未发出）→ 把卡片补发进该话题
         const lang = await getUserLang(ADMIN_UID);
         const card = buildNewUserCard(lang, uid, profile, method, { inTopic: true });
-        await sendMessage({
+        const topicRes = await sendMessage({
           chat_id: GROUP_ID,
           message_thread_id: ctx.threadId,
           text: card.text,
           parse_mode: 'HTML',
           link_preview_options: { is_disabled: true },
           reply_markup: card.reply_markup
-        });
-        await claimNewUserNotified(uid);
-        return;
+        }).catch(() => null);
+        if (topicRes && topicRes.ok) {
+          await claimNewUserNotified(uid);
+          return;
+        }
+        // 话题发送失败：不能认领去重标记，否则卡片静默丢失；继续走下方私聊回退
+        Logger.warn('new_user_notify_topic_send_failed', { userId: uid });
       }
       // 话题创建失败 → 回退到私聊通知
       Logger.warn('new_user_notify_topic_fallback_dm', { userId: uid });
@@ -2679,21 +2686,31 @@ async function handleMyChatMember(myChatMember) {
     const profile = (await getUserProfile(userId)) || from;
     Logger.info('bot_blocked_by_user', { userId });
 
-    // 路由：话题模式且该用户话题已存在 → 发进话题（不新建话题）；否则私发管理员
+    // 路由：话题模式 → 发进该用户的话题（还没有话题就新建一个，但不发欢迎卡）；
+    // 话题发送失败或建话题失败时才回退私发管理员（此前发送失败也被误记为已发话题，卡片会丢）
     const topicMode = await isTopicForwardingEnabled();
     let postedToTopic = false;
     if (topicMode && GROUP_ID) {
+      const lang = await getUserLang(ADMIN_UID);
+      const cardText = buildBlockedBotCard(lang, userId, profile);
       const userData = await safeGetJSON(`user:${userId}`, null);
-      if (userData && userData.thread_id) {
-        const lang = await getUserLang(ADMIN_UID);
-        await sendMessage({
+      let threadId = userData?.thread_id || null;
+      if (!threadId) {
+        const ctx = await ensureUserTopic(userId, profile, { welcome: false });
+        threadId = ctx?.threadId || null;
+      }
+      if (threadId) {
+        const res = await sendMessage({
           chat_id: GROUP_ID,
-          message_thread_id: userData.thread_id,
-          text: buildBlockedBotCard(lang, userId, profile),
+          message_thread_id: threadId,
+          text: cardText,
           parse_mode: 'HTML',
           link_preview_options: { is_disabled: true }
-        }).catch(() => { });
-        postedToTopic = true;
+        }).catch(() => null);
+        postedToTopic = !!(res && res.ok);
+        if (!postedToTopic) {
+          Logger.warn('blocked_notice_topic_send_failed', { userId, threadId });
+        }
       }
     }
 
@@ -2721,7 +2738,7 @@ async function sendTopicWelcomeMessage(threadId, userId, profile = null) {
     // 消费掉暂存的验证方式并认领去重标记，notifyNewUserVerified 不会重复发送。
     const method = consumePendingVerifyMethod(userId);
     const card = buildNewUserCard(lang, userId, profile, method, { inTopic: true });
-    await sendMessage({
+    const welcomeRes = await sendMessage({
       chat_id: GROUP_ID,
       message_thread_id: threadId,
       text: card.text,
@@ -2729,7 +2746,8 @@ async function sendTopicWelcomeMessage(threadId, userId, profile = null) {
       link_preview_options: { is_disabled: true },
       reply_markup: card.reply_markup
     });
-    if (method) {
+    // 仅在欢迎卡真正发成功时才认领去重标记；失败时留给 notifyNewUserVerified 补发
+    if (method && welcomeRes && welcomeRes.ok) {
       await claimNewUserNotified(userId);
     }
   } catch (e) {
@@ -4715,7 +4733,7 @@ function copyMessage(msg = {}) {
   return requestTelegram('copyMessage', msg);
 }
 
-// 发送成功临时通知：消息送达后在发送方会话里提示「✅ 发送成功」，1 秒后自动删除。
+// 发送成功临时通知：消息送达后在发送方会话里提示「✅ 发送成功」，2 秒后自动删除。
 // 只做送达反馈：通知本身发送/删除失败都静默忽略，不影响主流程结果。
 async function sendEphemeralSendSuccessNotice(target, lang) {
   if (!target || !target.chat_id) return;
@@ -4723,7 +4741,7 @@ async function sendEphemeralSendSuccessNotice(target, lang) {
     const notice = await sendMessage({ ...target, text: t(lang, 'send_success_notice') });
     const noticeMessageId = notice?.result?.message_id;
     if (!noticeMessageId) return;
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 2000));
     await requestTelegram('deleteMessage', {
       chat_id: target.chat_id,
       message_id: noticeMessageId
@@ -7442,7 +7460,7 @@ async function handleAdminMessage(message) {
             { chat_id: String(guestChatId), message_id: copyReq.result.message_id }
           );
         }
-        // 送达后在管理员当前会话（私聊或话题）里给一个临时「✅ 发送成功」提示，1 秒后自动删除
+        // 送达后在管理员当前会话（私聊或话题）里给一个临时「✅ 发送成功」提示，2 秒后自动删除
         await sendEphemeralSendSuccessNotice(getReplyTarget(), lang);
       }
 
@@ -8345,7 +8363,7 @@ async function handleGuestMessage(message) {
       result = await forwardMessagesToAdmin(messages, userId);
     }
     if (result?.ok) {
-      // 送达后给访客一个临时「✅ 发送成功」提示，1 秒后自动删除（相册只提示一次）
+      // 送达后给访客一个临时「✅ 发送成功」提示，2 秒后自动删除（相册只提示一次）
       const guestLang = await getUserLang(userId);
       await sendEphemeralSendSuccessNotice({ chat_id: userId }, guestLang);
     }
