@@ -1,7 +1,7 @@
 /**
  * SafeRelay - Telegram Private Chat Relay Bot
  * 项目地址: https://github.com/qianqi32/SafeRelay
- * 版本: 1.3.5
+ * 版本: 1.3.6
  * 当前版本可能仍不稳定，如遇到 BUG 请提交至 issues 或者直接联系 @KiyukieBot
 */
 
@@ -1205,13 +1205,23 @@ async function validateTurnstileSession(sessionId, signature) {
     return { valid: false };
   }
 
-  return { valid: true, userId: data.userId };
+  return { valid: true, userId: data.userId, consumed: data.consumed === true };
 }
 
 async function consumeTurnstileSession(sessionId) {
   if (!sessionId) return;
   try {
-    await KV.delete(`${TURNSTILE_SESSION_PREFIX}${sessionId}`);
+    // 不再直接删除：改为标记 consumed 并保留到自然过期。
+    // 回调重放仍会被 consumed 拦住；同时验证页在回调响应丢失时，
+    // 还能凭 session+sig 向 /verify-status 确认最终结果。
+    const key = `${TURNSTILE_SESSION_PREFIX}${sessionId}`;
+    const stored = await KV.get(key);
+    if (!stored) return;
+    const data = JSON.parse(stored);
+    data.consumed = true;
+    await KV.put(key, JSON.stringify(data), {
+      expirationTtl: Math.ceil(CONFIG.TURNSTILE_SESSION_TTL_MS / 1000)
+    });
   } catch (e) {
     Logger.warn('turnstile_session_delete_failed', { sessionId, error: e.message });
   }
@@ -4953,7 +4963,9 @@ addEventListener('fetch', event => {
   } else if (url.pathname === '/verify') {
     event.respondWith(handleVerifyPage(event.request));
   } else if (url.pathname === '/verify-callback') {
-    event.respondWith(handleVerifyCallback(event.request));
+    event.respondWith(handleVerifyCallback(event.request, event));
+  } else if (url.pathname === '/verify-status') {
+    event.respondWith(handleVerifyStatus(event.request));
   } else {
     event.respondWith(new Response('No handler for this request'));
   }
@@ -8107,19 +8119,64 @@ function handleVerifyPage(request) {
               }
           }
 
+          // 验证结果收敛：回调响应与状态轮询谁先确认成功就由谁收尾，
+          // 避免回调响应丢失/超时时页面无限转圈（状态其实可能已经通过）
+          let verifySettled = false;
+          let statusPollTimer = null;
+
+          function showVerifySuccess() {
+              if (verifySettled) return;
+              verifySettled = true;
+              if (statusPollTimer) { clearInterval(statusPollTimer); statusPollTimer = null; }
+              document.getElementById('loading-msg').classList.add('hidden');
+              document.getElementById('success-msg').classList.remove('hidden');
+              // 验证成功 1.5 秒后尝试关闭窗口
+              setTimeout(() => {
+                  try {
+                      if (tg) {
+                          tg.close();
+                      }
+                  } catch (e) {
+                      console.log('Failed to close window:', e);
+                  }
+              }, 1500);
+          }
+
+          function showVerifyError() {
+              if (verifySettled) return;
+              verifySettled = true;
+              if (statusPollTimer) { clearInterval(statusPollTimer); statusPollTimer = null; }
+              showError();
+          }
+
+          function startStatusPolling(session, signature) {
+              const deadline = Date.now() + 90000;
+              statusPollTimer = setInterval(() => {
+                  if (verifySettled) return;
+                  if (Date.now() > deadline) { showVerifyError(); return; }
+                  fetch('/verify-status?session=' + encodeURIComponent(session) + '&sig=' + encodeURIComponent(signature))
+                      .then(r => r.ok ? r.json() : null)
+                      .then(data => { if (data && data.verified) showVerifySuccess(); })
+                      .catch(() => { /* 网络抖动忽略，继续轮询 */ });
+              }, 2500);
+          }
+
           function onVerify(token, provider) {
               const urlParams = new URLSearchParams(window.location.search);
               const session = urlParams.get('session');
               const signature = urlParams.get('sig');
-              
+
               if (!session || !signature) {
                   showError();
                   return;
               }
-              
+
               // 显示加载状态
               document.getElementById('verify-section').classList.add('hidden');
               document.getElementById('loading-msg').classList.remove('hidden');
+
+              // 同时启动状态轮询：回调响应丢失/超时也能确认结果，不无限转圈
+              startStatusPolling(session, signature);
 
               // 获取用户信息
               let userInfo = null;
@@ -8144,30 +8201,18 @@ function handleVerifyPage(request) {
               })
               .then(response => {
                   if (response.ok) {
-                      // 隐藏加载状态，显示成功消息
-                      document.getElementById('loading-msg').classList.add('hidden');
-                      document.getElementById('success-msg').classList.remove('hidden');
-                      
-                      // 验证成功 1.5 秒后尝试关闭窗口
-                      setTimeout(() => {
-                          try {
-                              if (tg) {
-                                  tg.close();
-                              }
-                          } catch (e) {
-                              console.log('Failed to close window:', e);
-                          }
-                      }, 1500);
+                      showVerifySuccess();
                   } else {
-                      throw new Error('Verification failed');
+                      // 服务端明确拒绝（如 token 无效）：直接报错，不等轮询
+                      showVerifyError();
                   }
               })
               .catch(err => {
-                  console.error('Verification failed:', err);
-                  showError();
+                  // 网络错误/响应丢失：不在此报错，交给状态轮询确认（90 秒未确认才报错）
+                  console.error('Verification callback failed, falling back to status polling:', err);
               });
           }
-          
+
           function showError() {
               document.getElementById('loading-msg').classList.add('hidden');
               document.getElementById('verify-section').classList.add('hidden');
@@ -8191,7 +8236,7 @@ function handleVerifyPage(request) {
 }
 
 // 处理验证回调
-async function handleVerifyCallback(request) {
+async function handleVerifyCallback(request, event) {
   if (request.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 });
   }
@@ -8206,6 +8251,9 @@ async function handleVerifyCallback(request) {
     const sessionInfo = await validateTurnstileSession(session, signature);
     if (!sessionInfo.valid) {
       return new Response('Invalid verification session', { status: 400 });
+    }
+    if (sessionInfo.consumed) {
+      return new Response('Verification session already used', { status: 400 });
     }
 
     const uid = sessionInfo.userId;
@@ -8288,21 +8336,36 @@ async function handleVerifyCallback(request) {
     const webMethod = verifyProvider === 'cap' ? 'cap' : (webVerifyMode === 'both' ? 'both' : 'turnstile');
     markPendingVerifyMethod(uid, webMethod);
 
-    const pendingResult = await processPendingMessagesAfterVerification(uid);
-    Logger.info('web_captcha_verification_success', { userId: uid, provider: verifyProvider, pendingForwarded: pendingResult.forwarded });
+    // 【关键】已验证状态到此已落 KV，立即响应页面。
+    // 此前暂存消息转发 / 成功私信 / 新用户通知全部串行 await 在响应之前，
+    // 任一步慢（建话题、KV 延迟、Telegram 接口耗时）页面就一直转圈；
+    // 响应若丢失，状态其实已通过、页面却永远等不到结果。这段重活转后台执行。
+    const tail = (async () => {
+      try {
+        const pendingResult = await processPendingMessagesAfterVerification(uid);
+        Logger.info('web_captcha_verification_success', { userId: uid, provider: verifyProvider, pendingForwarded: pendingResult.forwarded });
 
-    const guestLang = await getUserLang(uid);
-    let successMsg = t(guestLang, 'turnstile_success');
-    if (pendingResult.forwarded > 0) {
-      successMsg = t(guestLang, 'turnstile_success_pending', { count: pendingResult.forwarded });
+        const guestLang = await getUserLang(uid);
+        let successMsg = t(guestLang, 'turnstile_success');
+        if (pendingResult.forwarded > 0) {
+          successMsg = t(guestLang, 'turnstile_success_pending', { count: pendingResult.forwarded });
+        }
+        await sendMessage({
+          chat_id: uid,
+          text: successMsg
+        }).catch(() => { });
+
+        // 新用户接入通知（统一走 notifyNewUserVerified：按转发模式路由 + 去重）
+        await notifyNewUserVerified(uid, userInfo || await getUserProfile(uid), webMethod);
+      } catch (e) {
+        Logger.error('verify_callback_tail_failed', e, { userId: uid });
+      }
+    })();
+    if (event && typeof event.waitUntil === 'function') {
+      event.waitUntil(tail);
+    } else {
+      tail.catch(() => { });
     }
-    await sendMessage({
-      chat_id: uid,
-      text: successMsg
-    });
-
-    // 新用户接入通知（统一走 notifyNewUserVerified：按转发模式路由 + 去重）
-    await notifyNewUserVerified(uid, userInfo || await getUserProfile(uid), webMethod);
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
@@ -8310,6 +8373,47 @@ async function handleVerifyCallback(request) {
     });
   } catch (e) {
     return new Response(e.message, { status: 500 });
+  }
+}
+
+/**
+ * 验证页状态轮询：凭 session+sig 查询该用户是否已验证。
+ * 回调响应丢失/超时时，页面靠它确认最终结果，不再无限转圈。
+ * 只做单次廉价检查（内存 → Cache API → KV），不走 isUserVerified 的退避重试，
+ * 重试由页面轮询本身完成。session 已 consumed 也允许查询（只读、无副作用）。
+ */
+async function handleVerifyStatus(request) {
+  const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'content-type': 'application/json' }
+  });
+  try {
+    const url = new URL(request.url);
+    const session = url.searchParams.get('session');
+    const signature = url.searchParams.get('sig');
+    if (!session || !signature) {
+      return json({ verified: false }, 400);
+    }
+    const sessionInfo = await validateTurnstileSession(session, signature);
+    if (!sessionInfo.valid) {
+      return json({ verified: false }, 400);
+    }
+    const verifiedKey = 'verified-' + String(sessionInfo.userId);
+    let verified = memGet(verifiedKey) === 'true';
+    if (!verified) {
+      const cached = await cacheApiGet(verifiedKey).catch(() => null);
+      verified = cached === 'true';
+    }
+    if (!verified) {
+      const value = await KV.get(verifiedKey).catch(() => null);
+      verified = value === 'true';
+      if (verified) {
+        memSet(verifiedKey, 'true', 5 * 60 * 1000);
+      }
+    }
+    return json({ verified });
+  } catch (e) {
+    return json({ verified: false }, 500);
   }
 }
 
